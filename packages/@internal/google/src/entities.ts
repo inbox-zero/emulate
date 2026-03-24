@@ -41,6 +41,34 @@ export interface GoogleMessage extends Entity {
   body_html: string | null;
 }
 
+export interface GoogleDraft extends Entity {
+  gmail_id: string;
+  user_email: string;
+  message_gmail_id: string;
+}
+
+export interface GoogleAttachment extends Entity {
+  gmail_id: string;
+  user_email: string;
+  message_gmail_id: string;
+  filename: string;
+  mime_type: string;
+  disposition: string | null;
+  content_id: string | null;
+  transfer_encoding: string | null;
+  data: string;
+  size: number;
+}
+
+export interface GoogleHistoryEvent extends Entity {
+  gmail_id: string;
+  user_email: string;
+  change_type: "messageAdded" | "messageDeleted" | "labelAdded" | "labelRemoved";
+  message_gmail_id: string;
+  thread_id: string;
+  label_ids: string[];
+}
+
 export interface GoogleLabel extends Entity {
   gmail_id: string;
   user_email: string;
@@ -50,4 +78,26 @@ export interface GoogleLabel extends Entity {
   label_list_visibility: string | null;
   color_background: string | null;
   color_text: string | null;
+}
+
+export interface GoogleFilter extends Entity {
+  gmail_id: string;
+  user_email: string;
+  criteria_from: string | null;
+  add_label_ids: string[];
+  remove_label_ids: string[];
+}
+
+export interface GoogleForwardingAddress extends Entity {
+  user_email: string;
+  forwarding_email: string;
+  verification_status: string;
+}
+
+export interface GoogleSendAs extends Entity {
+  user_email: string;
+  send_as_email: string;
+  display_name: string | null;
+  is_default: boolean;
+  signature: string;
 }

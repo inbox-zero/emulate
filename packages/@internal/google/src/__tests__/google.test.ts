@@ -195,6 +195,368 @@ describe("Google plugin integration", () => {
     expect(rawBody.raw).toBeDefined();
   });
 
+  it("returns attachment parts and serves attachment bodies", async () => {
+    const raw = buildRawMessage({
+      from: "Contracts <contracts@example.com>",
+      to: "testuser@example.com",
+      subject: "Signed contract attached",
+      body_text: "Please review the attached contract.",
+      body_html: "<p>Please review the attached contract.</p>",
+      attachments: [
+        {
+          filename: "contract.pdf",
+          mime_type: "application/pdf",
+          content: "fake-pdf-data",
+        },
+      ],
+    });
+
+    const importRes = await jsonRequest(app, "/gmail/v1/users/me/messages/import", {
+      method: "POST",
+      body: {
+        raw,
+        labelIds: ["INBOX"],
+      },
+    });
+
+    expect(importRes.status).toBe(200);
+    const imported = (await importRes.json()) as { id: string };
+
+    const messageRes = await app.request(`${base}/gmail/v1/users/me/messages/${imported.id}`, {
+      headers: authHeaders(),
+    });
+    expect(messageRes.status).toBe(200);
+
+    const message = (await messageRes.json()) as {
+      payload: {
+        mimeType: string;
+        parts?: Array<{
+          filename?: string;
+          body?: { attachmentId?: string; size?: number };
+        }>;
+      };
+    };
+
+    expect(message.payload.mimeType).toBe("multipart/mixed");
+    const attachmentPart = message.payload.parts?.find((part) => part.filename === "contract.pdf");
+    expect(attachmentPart?.body?.attachmentId).toBeDefined();
+    expect(attachmentPart?.body?.size).toBe(Buffer.byteLength("fake-pdf-data", "utf8"));
+
+    const attachmentRes = await app.request(
+      `${base}/gmail/v1/users/me/messages/${imported.id}/attachments/${attachmentPart!.body!.attachmentId}`,
+      { headers: authHeaders() },
+    );
+    expect(attachmentRes.status).toBe(200);
+
+    const attachment = (await attachmentRes.json()) as { data: string; size: number };
+    expect(Buffer.from(attachment.data, "base64url").toString("utf8")).toBe("fake-pdf-data");
+    expect(attachment.size).toBe(Buffer.byteLength("fake-pdf-data", "utf8"));
+
+    const listRes = await app.request(
+      `${base}/gmail/v1/users/me/messages?q=${encodeURIComponent("has:attachment")}`,
+      { headers: authHeaders() },
+    );
+    expect(listRes.status).toBe(200);
+    const listBody = (await listRes.json()) as {
+      messages: Array<{ id: string }>;
+    };
+    expect(listBody.messages.some((entry) => entry.id === imported.id)).toBe(true);
+  });
+
+  it("creates, updates, lists, sends, and deletes drafts", async () => {
+    const createRaw = buildRawMessage({
+      from: "testuser@example.com",
+      to: "partner@example.com",
+      subject: "Draft review",
+      body_html: "<p>First draft body</p>",
+    });
+
+    const createRes = await jsonRequest(app, "/gmail/v1/users/me/drafts", {
+      method: "POST",
+      body: {
+        message: {
+          threadId: "thread_support",
+          raw: createRaw,
+        },
+      },
+    });
+
+    expect(createRes.status).toBe(200);
+    const created = (await createRes.json()) as {
+      id: string;
+      message: { id: string; threadId: string; labelIds: string[]; payload: { headers: Array<{ name: string; value: string }> } };
+    };
+
+    expect(created.id).toMatch(/^r-\d+$/);
+    expect(created.message.threadId).toBe("thread_support");
+    expect(created.message.labelIds).toContain("DRAFT");
+    expect(created.message.payload.headers.find((header) => header.name === "Subject")?.value).toBe("Draft review");
+
+    const listRes = await app.request(`${base}/gmail/v1/users/me/drafts?maxResults=20`, {
+      headers: authHeaders(),
+    });
+    expect(listRes.status).toBe(200);
+    const listBody = (await listRes.json()) as {
+      drafts: Array<{ id: string; message?: { id: string; threadId: string } }>;
+    };
+    expect(listBody.drafts.some((draft) => draft.id === created.id && draft.message?.id === created.message.id)).toBe(true);
+
+    const getRes = await app.request(`${base}/gmail/v1/users/me/drafts/${created.id}?format=full`, {
+      headers: authHeaders(),
+    });
+    expect(getRes.status).toBe(200);
+
+    const updateRaw = buildRawMessage({
+      from: "testuser@example.com",
+      to: "partner@example.com",
+      subject: "Draft review updated",
+      body_html: "<p>Updated draft body</p>",
+    });
+
+    const updateRes = await jsonRequest(app, `/gmail/v1/users/me/drafts/${created.id}`, {
+      method: "PUT",
+      body: {
+        message: {
+          raw: updateRaw,
+        },
+      },
+    });
+    expect(updateRes.status).toBe(200);
+    const updated = (await updateRes.json()) as {
+      id: string;
+      message: { id: string; labelIds: string[]; payload: { headers: Array<{ name: string; value: string }> } };
+    };
+    expect(updated.id).toBe(created.id);
+    expect(updated.message.id).toBe(created.message.id);
+    expect(updated.message.labelIds).toContain("DRAFT");
+    expect(updated.message.payload.headers.find((header) => header.name === "Subject")?.value).toBe("Draft review updated");
+
+    const sendRes = await jsonRequest(app, "/gmail/v1/users/me/drafts/send", {
+      method: "POST",
+      body: { id: created.id },
+    });
+    expect(sendRes.status).toBe(200);
+    const sent = (await sendRes.json()) as { id: string; threadId: string; labelIds: string[] };
+    expect(sent.id).toBe(created.message.id);
+    expect(sent.threadId).toBe("thread_support");
+    expect(sent.labelIds).toContain("SENT");
+    expect(sent.labelIds).not.toContain("DRAFT");
+
+    const missingDraftRes = await app.request(`${base}/gmail/v1/users/me/drafts/${created.id}`, {
+      headers: authHeaders(),
+    });
+    expect(missingDraftRes.status).toBe(404);
+
+    const deleteRaw = buildRawMessage({
+      from: "testuser@example.com",
+      to: "delete@example.com",
+      subject: "Delete me",
+      body_text: "Disposable draft",
+    });
+    const secondCreateRes = await jsonRequest(app, "/gmail/v1/users/me/drafts", {
+      method: "POST",
+      body: {
+        message: { raw: deleteRaw },
+      },
+    });
+    const secondDraft = (await secondCreateRes.json()) as { id: string; message: { id: string } };
+
+    const deleteRes = await app.request(`${base}/gmail/v1/users/me/drafts/${secondDraft.id}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    expect(deleteRes.status).toBe(204);
+
+    const deletedMessageRes = await app.request(`${base}/gmail/v1/users/me/messages/${secondDraft.message.id}`, {
+      headers: authHeaders(),
+    });
+    expect(deletedMessageRes.status).toBe(404);
+  });
+
+  it("tracks history entries after watch registration", async () => {
+    const watchRes = await jsonRequest(app, "/gmail/v1/users/me/watch", {
+      method: "POST",
+      body: {
+        topicName: "projects/emulate-local/topics/gmail",
+        labelIds: ["INBOX", "SENT"],
+        labelFilterBehavior: "include",
+      },
+    });
+    expect(watchRes.status).toBe(200);
+
+    const watch = (await watchRes.json()) as { historyId: string; expiration: string };
+    expect(BigInt(watch.historyId)).toBeGreaterThan(0n);
+    expect(BigInt(watch.expiration)).toBeGreaterThan(BigInt(Date.now()));
+
+    const importRaw = buildRawMessage({
+      from: "Alerts <alerts@example.com>",
+      to: "testuser@example.com",
+      subject: "Deployment notification",
+      body_text: "A deployment has finished successfully.",
+    });
+    const importRes = await jsonRequest(app, "/gmail/v1/users/me/messages/import", {
+      method: "POST",
+      body: {
+        raw: importRaw,
+        labelIds: ["INBOX", "UNREAD"],
+      },
+    });
+    expect(importRes.status).toBe(200);
+
+    const imported = (await importRes.json()) as { id: string };
+
+    const modifyRes = await jsonRequest(app, `/gmail/v1/users/me/messages/${imported.id}/modify`, {
+      method: "POST",
+      body: {
+        addLabelIds: ["STARRED"],
+        removeLabelIds: ["UNREAD"],
+      },
+    });
+    expect(modifyRes.status).toBe(200);
+
+    const historyRes = await app.request(
+      `${base}/gmail/v1/users/me/history?startHistoryId=${watch.historyId}&historyTypes=messageAdded&historyTypes=labelAdded&historyTypes=labelRemoved`,
+      { headers: authHeaders() },
+    );
+    expect(historyRes.status).toBe(200);
+
+    const historyBody = (await historyRes.json()) as {
+      historyId: string;
+      history: Array<{
+        id: string;
+        messagesAdded?: Array<{ message: { id: string; threadId: string } }>;
+        labelsAdded?: Array<{ message: { id: string; threadId: string }; labelIds: string[] }>;
+        labelsRemoved?: Array<{ message: { id: string; threadId: string }; labelIds: string[] }>;
+      }>;
+    };
+
+    expect(BigInt(historyBody.historyId)).toBeGreaterThan(BigInt(watch.historyId));
+    expect(historyBody.history.some((entry) => entry.messagesAdded?.some((item) => item.message.id === imported.id))).toBe(true);
+    expect(
+      historyBody.history.some((entry) =>
+        entry.labelsAdded?.some((item) => item.message.id === imported.id && item.labelIds.includes("STARRED")),
+      ),
+    ).toBe(true);
+    expect(
+      historyBody.history.some((entry) =>
+        entry.labelsRemoved?.some((item) => item.message.id === imported.id && item.labelIds.includes("UNREAD")),
+      ),
+    ).toBe(true);
+
+    const stopRes = await app.request(`${base}/gmail/v1/users/me/stop`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    expect(stopRes.status).toBe(200);
+  });
+
+  it("lists settings resources and applies Gmail filters to matching messages", async () => {
+    const sendAsRes = await app.request(`${base}/gmail/v1/users/me/settings/sendAs`, {
+      headers: authHeaders(),
+    });
+    expect(sendAsRes.status).toBe(200);
+    const sendAsBody = (await sendAsRes.json()) as {
+      sendAs: Array<{ sendAsEmail: string; displayName?: string; isDefault: boolean }>;
+    };
+    expect(sendAsBody.sendAs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sendAsEmail: "testuser@example.com",
+          displayName: "Test User",
+          isDefault: true,
+        }),
+      ]),
+    );
+
+    const forwardingRes = await app.request(`${base}/gmail/v1/users/me/settings/forwardingAddresses`, {
+      headers: authHeaders(),
+    });
+    expect(forwardingRes.status).toBe(200);
+    const forwardingBody = (await forwardingRes.json()) as {
+      forwardingAddresses: Array<{ forwardingEmail: string }>;
+    };
+    expect(forwardingBody.forwardingAddresses).toEqual([]);
+
+    const createFilterRes = await jsonRequest(app, "/gmail/v1/users/me/settings/filters", {
+      method: "POST",
+      body: {
+        criteria: { from: "billing@example.com" },
+        action: { addLabelIds: ["Label_ops"], removeLabelIds: ["INBOX"] },
+      },
+    });
+    expect(createFilterRes.status).toBe(200);
+    const filter = (await createFilterRes.json()) as {
+      id: string;
+      criteria: { from: string };
+      action: { addLabelIds: string[]; removeLabelIds: string[] };
+    };
+    expect(filter.criteria.from).toBe("billing@example.com");
+    expect(filter.action.addLabelIds).toContain("Label_ops");
+    expect(filter.action.removeLabelIds).toContain("INBOX");
+
+    const duplicateFilterRes = await jsonRequest(app, "/gmail/v1/users/me/settings/filters", {
+      method: "POST",
+      body: {
+        criteria: { from: "billing@example.com" },
+        action: { addLabelIds: ["Label_ops"], removeLabelIds: ["INBOX"] },
+      },
+    });
+    expect(duplicateFilterRes.status).toBe(400);
+    const duplicateError = (await duplicateFilterRes.json()) as { error: { message: string } };
+    expect(duplicateError.error.message).toBe("Filter already exists");
+
+    const listFiltersRes = await app.request(`${base}/gmail/v1/users/me/settings/filters`, {
+      headers: authHeaders(),
+    });
+    expect(listFiltersRes.status).toBe(200);
+    const listedFilters = (await listFiltersRes.json()) as {
+      filter: Array<{ id: string }>;
+    };
+    expect(listedFilters.filter).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: filter.id })]),
+    );
+
+    const filteredRaw = buildRawMessage({
+      from: "Billing <billing@example.com>",
+      to: "testuser@example.com",
+      subject: "Filtered invoice",
+      body_text: "This should be relabeled by the emulator filter.",
+    });
+    const filteredImportRes = await jsonRequest(app, "/gmail/v1/users/me/messages/import", {
+      method: "POST",
+      body: {
+        raw: filteredRaw,
+        labelIds: ["INBOX", "UNREAD"],
+      },
+    });
+    expect(filteredImportRes.status).toBe(200);
+    const filteredMessage = (await filteredImportRes.json()) as { id: string };
+
+    const filteredMessageRes = await app.request(`${base}/gmail/v1/users/me/messages/${filteredMessage.id}`, {
+      headers: authHeaders(),
+    });
+    expect(filteredMessageRes.status).toBe(200);
+    const filteredBody = (await filteredMessageRes.json()) as { labelIds: string[] };
+    expect(filteredBody.labelIds).toContain("Label_ops");
+    expect(filteredBody.labelIds).toContain("UNREAD");
+    expect(filteredBody.labelIds).not.toContain("INBOX");
+
+    const deleteFilterRes = await app.request(`${base}/gmail/v1/users/me/settings/filters/${filter.id}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    expect(deleteFilterRes.status).toBe(204);
+
+    const afterDeleteRes = await app.request(`${base}/gmail/v1/users/me/settings/filters`, {
+      headers: authHeaders(),
+    });
+    expect(afterDeleteRes.status).toBe(200);
+    const afterDelete = (await afterDeleteRes.json()) as {
+      filter: Array<{ id: string }>;
+    };
+    expect(afterDelete.filter).toEqual([]);
+  });
+
   it("creates sent messages and appends them to existing threads", async () => {
     const raw = buildRawMessage({
       from: "testuser@example.com",

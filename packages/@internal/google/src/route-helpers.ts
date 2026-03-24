@@ -68,3 +68,14 @@ export function getString(body: Record<string, unknown>, ...fields: string[]): s
 
   return undefined;
 }
+
+export function getRecord(body: Record<string, unknown>, ...fields: string[]): Record<string, unknown> | undefined {
+  for (const field of fields) {
+    const value = body[field];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+
+  return undefined;
+}
