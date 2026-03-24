@@ -14,7 +14,7 @@ import {
   sendDraftMessage,
   updateDraftMessage,
 } from "../helpers.js";
-import { getRecord, getString, parseGoogleBody, requireGmailUser } from "../route-helpers.js";
+import { getRecord, getString, parseGoogleBody, parseMessageInputFromBody, requireGmailUser } from "../route-helpers.js";
 import { getGoogleStore } from "../store.js";
 
 export function draftRoutes({ app, store }: RouteContext): void {
@@ -26,27 +26,11 @@ export function draftRoutes({ app, store }: RouteContext): void {
 
     const body = await parseGoogleBody(c);
     const messageBody = getRecord(body, "message") ?? body;
-    const raw = getString(messageBody, "raw");
 
     try {
       const { draft } = createDraftMessage(gs, {
         user_email: authEmail,
-        raw,
-        thread_id: getString(messageBody, "threadId", "thread_id"),
-        from: getString(messageBody, "from") ?? authEmail,
-        to: getString(messageBody, "to"),
-        cc: getString(messageBody, "cc") ?? null,
-        bcc: getString(messageBody, "bcc") ?? null,
-        reply_to: getString(messageBody, "replyTo", "reply_to") ?? null,
-        subject: getString(messageBody, "subject"),
-        snippet: getString(messageBody, "snippet"),
-        body_text: getString(messageBody, "body_text", "text") ?? null,
-        body_html: getString(messageBody, "body_html", "html") ?? null,
-        date: getString(messageBody, "date"),
-        internal_date: getString(messageBody, "internalDate", "internal_date"),
-        message_id: getString(messageBody, "messageId", "message_id"),
-        references: getString(messageBody, "references") ?? null,
-        in_reply_to: getString(messageBody, "inReplyTo", "in_reply_to") ?? null,
+        ...parseMessageInputFromBody(messageBody, { from: authEmail }),
       });
 
       return c.json(formatDraftResource(gs, draft, "full"));
@@ -162,24 +146,7 @@ export function draftRoutes({ app, store }: RouteContext): void {
     const messageBody = getRecord(body, "message") ?? body;
 
     try {
-      const updated = updateDraftMessage(gs, draft, {
-        raw: getString(messageBody, "raw"),
-        thread_id: getString(messageBody, "threadId", "thread_id"),
-        from: getString(messageBody, "from"),
-        to: getString(messageBody, "to"),
-        cc: getString(messageBody, "cc") ?? null,
-        bcc: getString(messageBody, "bcc") ?? null,
-        reply_to: getString(messageBody, "replyTo", "reply_to") ?? null,
-        subject: getString(messageBody, "subject"),
-        snippet: getString(messageBody, "snippet"),
-        body_text: getString(messageBody, "body_text", "text") ?? null,
-        body_html: getString(messageBody, "body_html", "html") ?? null,
-        date: getString(messageBody, "date"),
-        internal_date: getString(messageBody, "internalDate", "internal_date"),
-        message_id: getString(messageBody, "messageId", "message_id"),
-        references: getString(messageBody, "references") ?? null,
-        in_reply_to: getString(messageBody, "inReplyTo", "in_reply_to") ?? null,
-      });
+      const updated = updateDraftMessage(gs, draft, parseMessageInputFromBody(messageBody));
 
       if (!updated) {
         return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");

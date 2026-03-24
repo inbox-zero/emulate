@@ -1,5 +1,7 @@
 import type { RouteContext } from "@internal/core";
+import type { GoogleHistoryEvent } from "../entities.js";
 import {
+  HISTORY_CHANGE_TYPES,
   findMissingLabelIds,
   getCurrentHistoryId,
   gmailError,
@@ -33,12 +35,8 @@ export function historyRoutes({ app, store }: RouteContext): void {
 
     const historyTypes = url.searchParams
       .getAll("historyTypes")
-      .filter(
-        (value): value is "messageAdded" | "messageDeleted" | "labelAdded" | "labelRemoved" =>
-          value === "messageAdded" ||
-          value === "messageDeleted" ||
-          value === "labelAdded" ||
-          value === "labelRemoved",
+      .filter((value): value is GoogleHistoryEvent["change_type"] =>
+        HISTORY_CHANGE_TYPES.has(value as GoogleHistoryEvent["change_type"]),
       );
 
     return c.json(

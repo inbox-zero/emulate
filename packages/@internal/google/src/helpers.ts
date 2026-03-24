@@ -55,6 +55,13 @@ export interface GoogleFilterInput {
   remove_label_ids?: string[];
 }
 
+export const HISTORY_CHANGE_TYPES = new Set<GoogleHistoryEvent["change_type"]>([
+  "messageAdded",
+  "messageDeleted",
+  "labelAdded",
+  "labelRemoved",
+]);
+
 export interface GmailHistoryListOptions {
   startHistoryId: string;
   historyTypes?: Array<GoogleHistoryEvent["change_type"]>;
@@ -600,15 +607,20 @@ export function getAttachmentById(
 }
 
 export function listDraftsForUser(gs: GoogleStore, userEmail: string): GoogleDraft[] {
-  return gs.drafts
-    .findBy("user_email", userEmail)
+  const drafts = gs.drafts.findBy("user_email", userEmail);
+  const messageMap = new Map<string, GoogleMessage | undefined>();
+  for (const draft of drafts) {
+    messageMap.set(draft.gmail_id, getDraftMessage(gs, draft));
+  }
+
+  return drafts
     .filter((draft) => {
-      const message = getDraftMessage(gs, draft);
+      const message = messageMap.get(draft.gmail_id);
       return Boolean(message && message.label_ids.includes("DRAFT") && !message.label_ids.includes("SENT"));
     })
     .sort((a, b) => {
-      const aMessage = getDraftMessage(gs, a);
-      const bMessage = getDraftMessage(gs, b);
+      const aMessage = messageMap.get(a.gmail_id);
+      const bMessage = messageMap.get(b.gmail_id);
       return Number(bMessage?.internal_date ?? 0) - Number(aMessage?.internal_date ?? 0);
     });
 }
@@ -1352,7 +1364,7 @@ function applyFiltersToLabelIds(
     nextLabelIds = applyLabelMutation(nextLabelIds, filter.add_label_ids, filter.remove_label_ids);
   }
 
-  return dedupeLabelIds(nextLabelIds);
+  return nextLabelIds;
 }
 
 function syncDraftState(
@@ -1410,7 +1422,9 @@ function listAttachmentsForMessage(gs: GoogleStore, message: GoogleMessage): Goo
 }
 
 function hasMessageAttachments(gs: GoogleStore, message: GoogleMessage): boolean {
-  return listAttachmentsForMessage(gs, message).length > 0;
+  return gs.attachments
+    .findBy("message_gmail_id", message.gmail_id)
+    .some((attachment) => attachment.user_email === message.user_email);
 }
 
 function ensureDefaultSendAs(gs: GoogleStore, userEmail: string): void {

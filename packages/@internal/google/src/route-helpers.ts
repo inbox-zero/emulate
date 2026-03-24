@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import type { GoogleMessageInput } from "./helpers.js";
 import { getAuthenticatedEmail, gmailError, matchesRequestedUser } from "./helpers.js";
 
 export function requireGmailUser(c: Context): string | Response {
@@ -78,4 +79,28 @@ export function getRecord(body: Record<string, unknown>, ...fields: string[]): R
   }
 
   return undefined;
+}
+
+export function parseMessageInputFromBody(
+  body: Record<string, unknown>,
+  defaults?: { from?: string },
+): Omit<GoogleMessageInput, "user_email"> {
+  return {
+    raw: getString(body, "raw"),
+    thread_id: getString(body, "threadId", "thread_id"),
+    from: getString(body, "from") ?? defaults?.from,
+    to: getString(body, "to"),
+    cc: getString(body, "cc") ?? null,
+    bcc: getString(body, "bcc") ?? null,
+    reply_to: getString(body, "replyTo", "reply_to") ?? null,
+    subject: getString(body, "subject"),
+    snippet: getString(body, "snippet"),
+    body_text: getString(body, "body_text", "text") ?? null,
+    body_html: getString(body, "body_html", "html") ?? null,
+    date: getString(body, "date"),
+    internal_date: getString(body, "internalDate", "internal_date"),
+    message_id: getString(body, "messageId", "message_id"),
+    references: getString(body, "references") ?? null,
+    in_reply_to: getString(body, "inReplyTo", "in_reply_to") ?? null,
+  };
 }
