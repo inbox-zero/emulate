@@ -15,7 +15,10 @@ import {
   findLabelByName,
   generateUid,
 } from "./helpers.js";
+import { labelRoutes } from "./routes/labels.js";
+import { messageRoutes } from "./routes/messages.js";
 import { oauthRoutes } from "./routes/oauth.js";
+import { threadRoutes } from "./routes/threads.js";
 import { getGoogleStore } from "./store.js";
 
 export { getGoogleStore, type GoogleStore } from "./store.js";
@@ -273,6 +276,9 @@ export const googlePlugin: ServicePlugin = {
   ): void {
     const ctx: RouteContext = { app, store, webhooks, baseUrl, tokenMap };
     oauthRoutes(ctx);
+    messageRoutes(ctx);
+    threadRoutes(ctx);
+    labelRoutes(ctx);
   },
   seed(store: Store, baseUrl: string): void {
     seedDefaults(store, baseUrl);
