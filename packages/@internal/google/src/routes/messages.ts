@@ -18,7 +18,7 @@ import {
   trashLabelIds,
   untrashLabelIds,
 } from "../helpers.js";
-import { requireGmailUser, parseGoogleBody, getStringArray, getString } from "../route-helpers.js";
+import { getStringArray, parseGoogleBody, parseMessageInputFromBody, requireGmailUser } from "../route-helpers.js";
 import { getGoogleStore } from "../store.js";
 
 export function messageRoutes({ app, store }: RouteContext): void {
@@ -46,10 +46,10 @@ export function messageRoutes({ app, store }: RouteContext): void {
         return gmailError(c, 400, `Invalid label IDs: ${missingLabelIds.join(", ")}`, "invalidArgument", "INVALID_ARGUMENT");
       }
 
-      const raw = getString(body, "raw");
-      const from = getString(body, "from") ?? (mode === "send" ? authEmail : undefined);
-      const to = getString(body, "to");
-      if (!raw && (!from || !to)) {
+      const messageInput = parseMessageInputFromBody(body, {
+        from: mode === "send" ? authEmail : undefined,
+      });
+      if (!messageInput.raw && (!messageInput.from || !messageInput.to)) {
         return gmailError(
           c,
           400,
@@ -62,23 +62,8 @@ export function messageRoutes({ app, store }: RouteContext): void {
       try {
         const message = createStoredMessage(gs, {
           user_email: authEmail,
-          raw,
-          thread_id: getString(body, "threadId", "thread_id"),
-          from,
-          to,
-          cc: getString(body, "cc") ?? null,
-          bcc: getString(body, "bcc") ?? null,
-          reply_to: getString(body, "replyTo", "reply_to") ?? null,
-          subject: getString(body, "subject"),
-          snippet: getString(body, "snippet"),
-          body_text: getString(body, "body_text", "text") ?? null,
-          body_html: getString(body, "body_html", "html") ?? null,
+          ...messageInput,
           label_ids: defaultLabelIds,
-          date: getString(body, "date"),
-          internal_date: getString(body, "internalDate", "internal_date"),
-          message_id: getString(body, "messageId", "message_id"),
-          references: getString(body, "references") ?? null,
-          in_reply_to: getString(body, "inReplyTo", "in_reply_to") ?? null,
         });
 
         return c.json(formatMessageResource(gs, message, "full"));

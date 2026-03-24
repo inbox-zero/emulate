@@ -62,6 +62,10 @@ export const HISTORY_CHANGE_TYPES = new Set<GoogleHistoryEvent["change_type"]>([
   "labelRemoved",
 ]);
 
+export function isHistoryChangeType(value: string): value is GoogleHistoryEvent["change_type"] {
+  return HISTORY_CHANGE_TYPES.has(value as GoogleHistoryEvent["change_type"]);
+}
+
 export interface GmailHistoryListOptions {
   startHistoryId: string;
   historyTypes?: Array<GoogleHistoryEvent["change_type"]>;

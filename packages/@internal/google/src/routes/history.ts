@@ -1,10 +1,9 @@
 import type { RouteContext } from "@internal/core";
-import type { GoogleHistoryEvent } from "../entities.js";
 import {
-  HISTORY_CHANGE_TYPES,
   findMissingLabelIds,
   getCurrentHistoryId,
   gmailError,
+  isHistoryChangeType,
   listHistoryForUser,
   normalizeLimit,
 } from "../helpers.js";
@@ -35,9 +34,7 @@ export function historyRoutes({ app, store }: RouteContext): void {
 
     const historyTypes = url.searchParams
       .getAll("historyTypes")
-      .filter((value): value is GoogleHistoryEvent["change_type"] =>
-        HISTORY_CHANGE_TYPES.has(value as GoogleHistoryEvent["change_type"]),
-      );
+      .filter(isHistoryChangeType);
 
     return c.json(
       listHistoryForUser(gs, authEmail, {
