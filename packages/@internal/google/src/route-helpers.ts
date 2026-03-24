@@ -2,12 +2,12 @@ import type { Context } from "hono";
 import type { GoogleCalendarEventInput } from "./calendar-helpers.js";
 import type { GoogleDriveItemInput } from "./drive-helpers.js";
 import type { GoogleMessageInput } from "./helpers.js";
-import { getAuthenticatedEmail, gmailError, matchesRequestedUser } from "./helpers.js";
+import { getAuthenticatedEmail, googleApiError, matchesRequestedUser } from "./helpers.js";
 
 export function requireGoogleAuth(c: Context): string | Response {
   const authEmail = getAuthenticatedEmail(c);
   if (!authEmail) {
-    return gmailError(c, 401, "Request had invalid authentication credentials.", "authError", "UNAUTHENTICATED");
+    return googleApiError(c, 401, "Request had invalid authentication credentials.", "authError", "UNAUTHENTICATED");
   }
 
   return authEmail;
@@ -20,7 +20,7 @@ export function requireGmailUser(c: Context): string | Response {
   }
 
   if (!matchesRequestedUser(c.req.param("userId"), authEmail)) {
-    return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
   }
 
   return authEmail;

@@ -10,7 +10,7 @@ import {
   listCalendarEvents,
   listCalendarsForUser,
 } from "../calendar-helpers.js";
-import { gmailError } from "../helpers.js";
+import { googleApiError } from "../helpers.js";
 import {
   getRecord,
   getRecordArray,
@@ -40,7 +40,7 @@ export function calendarRoutes({ app, store }: RouteContext): void {
 
     const calendar = getCalendarById(gs, authEmail, c.req.param("calendarId"));
     if (!calendar) {
-      return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
     const url = new URL(c.req.url);
@@ -66,7 +66,7 @@ export function calendarRoutes({ app, store }: RouteContext): void {
 
     const calendar = getCalendarById(gs, authEmail, c.req.param("calendarId"));
     if (!calendar) {
-      return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
     const body = await parseGoogleBody(c);
@@ -74,7 +74,7 @@ export function calendarRoutes({ app, store }: RouteContext): void {
     const eventInput = parseCalendarEventInputFromBody(requestBody);
 
     if ((!eventInput.start_date_time && !eventInput.start_date) || (!eventInput.end_date_time && !eventInput.end_date)) {
-      return gmailError(c, 400, "Event start and end are required.", "invalidArgument", "INVALID_ARGUMENT");
+      return googleApiError(c, 400, "Event start and end are required.", "invalidArgument", "INVALID_ARGUMENT");
     }
 
     const event = createCalendarEventRecord(gs, {
@@ -92,7 +92,7 @@ export function calendarRoutes({ app, store }: RouteContext): void {
 
     const event = getCalendarEventById(gs, authEmail, c.req.param("calendarId"), c.req.param("eventId"));
     if (!event) {
-      return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
     deleteCalendarEventRecord(gs, event);
@@ -114,7 +114,7 @@ export function calendarRoutes({ app, store }: RouteContext): void {
       .filter((entry) => entry.id.length > 0);
 
     if (!timeMin || !timeMax) {
-      return gmailError(c, 400, "timeMin and timeMax are required.", "invalidArgument", "INVALID_ARGUMENT");
+      return googleApiError(c, 400, "timeMin and timeMax are required.", "invalidArgument", "INVALID_ARGUMENT");
     }
 
     return c.json(
