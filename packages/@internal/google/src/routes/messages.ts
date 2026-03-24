@@ -2,9 +2,11 @@ import type { RouteContext } from "@internal/core";
 import type { Context } from "hono";
 import {
   createStoredMessage,
+  deleteMessage,
   dedupeLabelIds,
   findMissingLabelIds,
   formatMessageResource,
+  getAttachmentById,
   getMessageById,
   gmailError,
   listMessagesForUser,
@@ -16,7 +18,7 @@ import {
   trashLabelIds,
   untrashLabelIds,
 } from "../helpers.js";
-import { requireGmailUser, parseGoogleBody, getStringArray, getString } from "../route-helpers.js";
+import { getStringArray, parseGoogleBody, parseMessageInputFromBody, requireGmailUser } from "../route-helpers.js";
 import { getGoogleStore } from "../store.js";
 
 export function messageRoutes({ app, store }: RouteContext): void {
@@ -44,10 +46,10 @@ export function messageRoutes({ app, store }: RouteContext): void {
         return gmailError(c, 400, `Invalid label IDs: ${missingLabelIds.join(", ")}`, "invalidArgument", "INVALID_ARGUMENT");
       }
 
-      const raw = getString(body, "raw");
-      const from = getString(body, "from") ?? (mode === "send" ? authEmail : undefined);
-      const to = getString(body, "to");
-      if (!raw && (!from || !to)) {
+      const messageInput = parseMessageInputFromBody(body, {
+        from: mode === "send" ? authEmail : undefined,
+      });
+      if (!messageInput.raw && (!messageInput.from || !messageInput.to)) {
         return gmailError(
           c,
           400,
@@ -60,26 +62,11 @@ export function messageRoutes({ app, store }: RouteContext): void {
       try {
         const message = createStoredMessage(gs, {
           user_email: authEmail,
-          raw,
-          thread_id: getString(body, "threadId", "thread_id"),
-          from,
-          to,
-          cc: getString(body, "cc") ?? null,
-          bcc: getString(body, "bcc") ?? null,
-          reply_to: getString(body, "replyTo", "reply_to") ?? null,
-          subject: getString(body, "subject"),
-          snippet: getString(body, "snippet"),
-          body_text: getString(body, "body_text", "text") ?? null,
-          body_html: getString(body, "body_html", "html") ?? null,
+          ...messageInput,
           label_ids: defaultLabelIds,
-          date: getString(body, "date"),
-          internal_date: getString(body, "internalDate", "internal_date"),
-          message_id: getString(body, "messageId", "message_id"),
-          references: getString(body, "references") ?? null,
-          in_reply_to: getString(body, "inReplyTo", "in_reply_to") ?? null,
         });
 
-        return c.json(formatMessageResource(message, "full"));
+        return c.json(formatMessageResource(gs, message, "full"));
       } catch {
         return gmailError(
           c,
@@ -154,7 +141,7 @@ export function messageRoutes({ app, store }: RouteContext): void {
 
     for (const messageId of ids) {
       const message = getMessageById(gs, authEmail, messageId);
-      if (message) gs.messages.delete(message.id);
+      if (message) deleteMessage(gs, message);
     }
 
     return c.body(null, 204);
@@ -166,6 +153,27 @@ export function messageRoutes({ app, store }: RouteContext): void {
   app.post("/upload/gmail/v1/users/:userId/messages/send", createHandler("send"));
   app.post("/gmail/v1/users/:userId/messages", createHandler("insert"));
   app.post("/upload/gmail/v1/users/:userId/messages", createHandler("insert"));
+
+  app.get("/gmail/v1/users/:userId/messages/:messageId/attachments/:id", (c) => {
+    const authEmail = requireGmailUser(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const message = getMessageById(gs, authEmail, c.req.param("messageId"));
+    if (!message) {
+      return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+
+    const attachment = getAttachmentById(gs, authEmail, message.gmail_id, c.req.param("id"));
+    if (!attachment) {
+      return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+
+    return c.json({
+      attachmentId: attachment.gmail_id,
+      size: attachment.size,
+      data: attachment.data,
+    });
+  });
 
   app.get("/gmail/v1/users/:userId/messages/:id", (c) => {
     const authEmail = requireGmailUser(c);
@@ -179,6 +187,7 @@ export function messageRoutes({ app, store }: RouteContext): void {
     const url = new URL(c.req.url);
     return c.json(
       formatMessageResource(
+        gs,
         message,
         parseFormat(url.searchParams.get("format")),
         url.searchParams.getAll("metadataHeaders"),
@@ -208,7 +217,7 @@ export function messageRoutes({ app, store }: RouteContext): void {
       message,
       message.label_ids.filter((labelId) => !removeLabelIds.includes(labelId)).concat(addLabelIds),
     );
-    return c.json(formatMessageResource(updated, "full"));
+    return c.json(formatMessageResource(gs, updated, "full"));
   });
 
   app.post("/gmail/v1/users/:userId/messages/:id/trash", (c) => {
@@ -220,7 +229,7 @@ export function messageRoutes({ app, store }: RouteContext): void {
       return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
-    return c.json(formatMessageResource(markMessageModified(gs, message, trashLabelIds(message.label_ids)), "full"));
+    return c.json(formatMessageResource(gs, markMessageModified(gs, message, trashLabelIds(message.label_ids)), "full"));
   });
 
   app.post("/gmail/v1/users/:userId/messages/:id/untrash", (c) => {
@@ -232,7 +241,7 @@ export function messageRoutes({ app, store }: RouteContext): void {
       return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
-    return c.json(formatMessageResource(markMessageModified(gs, message, untrashLabelIds(message.label_ids)), "full"));
+    return c.json(formatMessageResource(gs, markMessageModified(gs, message, untrashLabelIds(message.label_ids)), "full"));
   });
 
   app.delete("/gmail/v1/users/:userId/messages/:id", (c) => {
@@ -244,7 +253,7 @@ export function messageRoutes({ app, store }: RouteContext): void {
       return gmailError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
-    gs.messages.delete(message.id);
+    deleteMessage(gs, message);
     return c.body(null, 204);
   });
 }

@@ -1,5 +1,6 @@
 import type { RouteContext } from "@internal/core";
 import {
+  deleteMessage,
   findMissingLabelIds,
   formatThreadResource,
   getThreadMessages,
@@ -64,6 +65,7 @@ export function threadRoutes({ app, store }: RouteContext): void {
 
     return c.json(
       formatThreadResource(
+        gs,
         messages,
         parseFormat(url.searchParams.get("format")),
         url.searchParams.getAll("metadataHeaders"),
@@ -96,7 +98,7 @@ export function threadRoutes({ app, store }: RouteContext): void {
       ),
     );
 
-    return c.json(formatThreadResource(updated, "full"));
+    return c.json(formatThreadResource(gs, updated, "full"));
   });
 
   app.post("/gmail/v1/users/:userId/threads/:id/trash", (c) => {
@@ -109,7 +111,7 @@ export function threadRoutes({ app, store }: RouteContext): void {
     }
 
     const updated = messages.map((message) => markMessageModified(gs, message, trashLabelIds(message.label_ids)));
-    return c.json(formatThreadResource(updated, "full"));
+    return c.json(formatThreadResource(gs, updated, "full"));
   });
 
   app.post("/gmail/v1/users/:userId/threads/:id/untrash", (c) => {
@@ -122,7 +124,7 @@ export function threadRoutes({ app, store }: RouteContext): void {
     }
 
     const updated = messages.map((message) => markMessageModified(gs, message, untrashLabelIds(message.label_ids)));
-    return c.json(formatThreadResource(updated, "full"));
+    return c.json(formatThreadResource(gs, updated, "full"));
   });
 
   app.delete("/gmail/v1/users/:userId/threads/:id", (c) => {
@@ -135,7 +137,7 @@ export function threadRoutes({ app, store }: RouteContext): void {
     }
 
     for (const message of messages) {
-      gs.messages.delete(message.id);
+      deleteMessage(gs, message);
     }
 
     return c.body(null, 204);
