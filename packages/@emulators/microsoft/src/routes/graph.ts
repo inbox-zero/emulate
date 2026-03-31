@@ -49,8 +49,12 @@ type DriveUploadSessionRecord = {
   contentType: string;
   totalSize: number;
   uploadedBytes: number;
-  contentBytes: string;
+  contentChunks: Buffer[];
 };
+
+function finalizeUploadedContent(chunks: Buffer[]): string {
+  return Buffer.concat(chunks).toString("base64");
+}
 
 function getUploadSessions(ctx: RouteContext): Map<string, UploadSessionRecord> {
   let sessions = ctx.store.getData<Map<string, UploadSessionRecord>>("microsoft.uploadSessions");
@@ -562,7 +566,7 @@ export function graphRoutes(ctx: RouteContext): void {
       contentType: typeof attachmentItem.contentType === "string" ? attachmentItem.contentType : "application/octet-stream",
       totalSize: typeof attachmentItem.size === "number" ? attachmentItem.size : 0,
       uploadedBytes: 0,
-      contentBytes: "",
+      contentChunks: [],
     });
     return c.json({
       uploadUrl: `${ctx.baseUrl}/upload/microsoft/v1.0/messages/${message.microsoft_id}/attachments/sessions/${sessionId}`,
@@ -600,7 +604,7 @@ export function graphRoutes(ctx: RouteContext): void {
     }
     const chunk = Buffer.from(await c.req.arrayBuffer());
     const updatedBytes = end + 1;
-    session.contentBytes += chunk.toString("base64");
+    session.contentChunks.push(chunk);
     session.totalSize = total;
     session.uploadedBytes = updatedBytes;
     getUploadSessions(ctx).set(session.sessionId, session);
@@ -613,7 +617,7 @@ export function graphRoutes(ctx: RouteContext): void {
         name: session.attachmentName,
         content_type: session.contentType,
         size: total,
-        content_bytes: session.contentBytes,
+        content_bytes: finalizeUploadedContent(session.contentChunks),
       });
       getUploadSessions(ctx).delete(session.sessionId);
       return c.json(formatAttachmentResource(attachment), 201);
@@ -1249,7 +1253,7 @@ export function graphRoutes(ctx: RouteContext): void {
       contentType,
       totalSize: typeof itemBody.fileSize === "number" ? itemBody.fileSize : 0,
       uploadedBytes: 0,
-      contentBytes: "",
+      contentChunks: [],
     });
     return c.json({
       uploadUrl: `${ctx.baseUrl}/upload/microsoft/v1.0/drive/sessions/${sessionId}`,
@@ -1282,7 +1286,7 @@ export function graphRoutes(ctx: RouteContext): void {
       return c.json({ nextExpectedRanges: [`${session.uploadedBytes}-`] }, 416);
     }
     const chunk = Buffer.from(await c.req.arrayBuffer());
-    session.contentBytes += chunk.toString("base64");
+    session.contentChunks.push(chunk);
     session.totalSize = total;
     session.uploadedBytes = end + 1;
     getDriveUploadSessions(ctx).set(session.sessionId, session);
@@ -1295,7 +1299,7 @@ export function graphRoutes(ctx: RouteContext): void {
         parent_microsoft_id: session.parentId,
         is_folder: false,
         mime_type: session.contentType,
-        content_bytes: session.contentBytes,
+        content_bytes: finalizeUploadedContent(session.contentChunks),
         web_url_base: ctx.baseUrl,
       });
       getDriveUploadSessions(ctx).delete(session.sessionId);

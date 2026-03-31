@@ -89,7 +89,7 @@ export interface UploadSessionRecord {
   contentType: string;
   totalSize: number;
   uploadedBytes: number;
-  contentBytes: string;
+  contentChunks: Buffer[];
 }
 
 /**

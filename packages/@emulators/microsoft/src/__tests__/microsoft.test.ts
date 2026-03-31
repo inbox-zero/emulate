@@ -696,12 +696,23 @@ describe("Microsoft plugin integration", () => {
     const uploadSessionBody = await uploadSessionRes.json() as Record<string, unknown>;
     const uploadUrl = String(uploadSessionBody.uploadUrl);
 
+    const firstChunkRes = await app.request(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Range": "bytes 0-1/5" },
+      body: Buffer.from("he"),
+    });
+    expect(firstChunkRes.status).toBe(202);
+    const firstChunkBody = await firstChunkRes.json() as Record<string, unknown>;
+    expect(firstChunkBody.nextExpectedRanges).toEqual(["2-"]);
+
     const uploadChunkRes = await app.request(uploadUrl, {
       method: "PUT",
-      headers: { "Content-Range": "bytes 0-3/4" },
-      body: Buffer.from("test"),
+      headers: { "Content-Range": "bytes 2-4/5" },
+      body: Buffer.from("llo"),
     });
     expect(uploadChunkRes.status).toBe(201);
+    const uploadedAttachment = await uploadChunkRes.json() as Record<string, unknown>;
+    expect(Buffer.from(String(uploadedAttachment.contentBytes), "base64").toString("utf8")).toBe("hello");
 
     const categoriesRes = await app.request(`${base}/v1.0/me/outlook/masterCategories`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -968,10 +979,19 @@ describe("Microsoft plugin integration", () => {
     const createSessionBody = await createSessionRes.json() as Record<string, unknown>;
     const uploadUrl = String(createSessionBody.uploadUrl);
 
+    const firstChunkRes = await app.request(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Range": "bytes 0-1/5" },
+      body: Buffer.from("he"),
+    });
+    expect(firstChunkRes.status).toBe(202);
+    const firstChunkBody = await firstChunkRes.json() as Record<string, unknown>;
+    expect(firstChunkBody.nextExpectedRanges).toEqual(["2-"]);
+
     const uploadChunkRes = await app.request(uploadUrl, {
       method: "PUT",
-      headers: { "Content-Range": "bytes 0-10/11" },
-      body: Buffer.from("hello world"),
+      headers: { "Content-Range": "bytes 2-4/5" },
+      body: Buffer.from("llo"),
     });
     expect(uploadChunkRes.status).toBe(201);
     const uploadedFile = await uploadChunkRes.json() as Record<string, unknown>;
@@ -983,6 +1003,12 @@ describe("Microsoft plugin integration", () => {
     expect(getItemRes.status).toBe(200);
     const getItemBody = await getItemRes.json() as Record<string, unknown>;
     expect(getItemBody.name).toBe("chunked.txt");
+
+    const downloadRes = await app.request(`${base}/v1.0/me/drive/items/${fileId}/content`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(downloadRes.status).toBe(200);
+    expect(await downloadRes.text()).toBe("hello");
 
     const deleteRes = await app.request(`${base}/v1.0/me/drive/items/${fileId}`, {
       method: "DELETE",
