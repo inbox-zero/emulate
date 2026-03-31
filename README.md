@@ -5,7 +5,7 @@ Local drop-in replacement services for CI and no-network sandboxes. Fully statef
 ## Quick Start
 
 ```bash
-npx @inbox-zero/emulate
+npx emulate
 ```
 
 All services start with sensible defaults. No config file needed:
@@ -52,13 +52,13 @@ The port can also be set via `EMULATE_PORT` or `PORT` environment variables.
 ## Programmatic API
 
 ```bash
-npm install @inbox-zero/emulate
+npm install emulate
 ```
 
 Each call to `createEmulator` starts a single service:
 
 ```typescript
-import { createEmulator } from '@inbox-zero/emulate'
+import { createEmulator } from 'emulate'
 
 const github = await createEmulator({ service: 'github', port: 4001 })
 const vercel = await createEmulator({ service: 'vercel', port: 4002 })
@@ -74,7 +74,7 @@ await vercel.close()
 
 ```typescript
 // vitest.setup.ts
-import { createEmulator, type Emulator } from '@inbox-zero/emulate'
+import { createEmulator, type Emulator } from 'emulate'
 
 let github: Emulator
 let vercel: Emulator
