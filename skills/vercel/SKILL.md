@@ -1,7 +1,7 @@
 ---
 name: vercel
 description: Emulated Vercel REST API for local development and testing. Use when the user needs to interact with Vercel API endpoints locally, test Vercel integrations, emulate projects/deployments/domains, set up Vercel OAuth flows, manage environment variables, or test without hitting the real Vercel API. Triggers include "Vercel API", "emulate Vercel", "mock Vercel", "test Vercel OAuth", "Vercel integration", "local Vercel", or any task requiring a local Vercel API.
-allowed-tools: Bash(npx emulate:*), Bash(emulate:*), Bash(curl:*)
+allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(emulate:*), Bash(curl:*)
 ---
 
 # Vercel API Emulator
@@ -12,7 +12,7 @@ Fully stateful Vercel REST API emulation with Vercel-style JSON responses and cu
 
 ```bash
 # Vercel only
-npx emulate --service vercel
+npx @inbox-zero/emulate --service vercel
 
 # Default port
 # http://localhost:4000
@@ -21,7 +21,7 @@ npx emulate --service vercel
 Or programmatically:
 
 ```typescript
-import { createEmulator } from 'emulate'
+import { createEmulator } from '@inbox-zero/emulate'
 
 const vercel = await createEmulator({ service: 'vercel', port: 4000 })
 // vercel.url === 'http://localhost:4000'

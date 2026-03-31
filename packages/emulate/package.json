@@ -1,5 +1,5 @@
 {
-  "name": "emulate",
+  "name": "@inbox-zero/emulate",
   "version": "0.4.5",
   "description": "Local drop-in replacement services for CI and no-network sandboxes",
   "license": "Apache-2.0",
@@ -15,14 +15,14 @@
   },
   "main": "./dist/api.js",
   "types": "./dist/api.d.ts",
-  "homepage": "https://github.com/vercel-labs/emulate",
+  "homepage": "https://github.com/inbox-zero/emulate",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vercel-labs/emulate.git",
+    "url": "https://github.com/inbox-zero/emulate.git",
     "directory": "packages/emulate"
   },
   "bugs": {
-    "url": "https://github.com/vercel-labs/emulate/issues"
+    "url": "https://github.com/inbox-zero/emulate/issues"
   },
   "keywords": [
     "emulator",

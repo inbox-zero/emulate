@@ -83,7 +83,7 @@ function Header() {
         <nav className="flex items-center gap-4">
           <Search />
           <a
-            href="https://github.com/vercel-labs/emulate"
+            href="https://github.com/inbox-zero/emulate"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors dark:text-neutral-400 dark:hover:text-neutral-100"
@@ -93,7 +93,7 @@ function Header() {
             </svg>
           </a>
           <a
-            href="https://www.npmjs.com/package/emulate"
+            href="https://www.npmjs.com/package/@inbox-zero/emulate"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors dark:text-neutral-400 dark:hover:text-neutral-100"

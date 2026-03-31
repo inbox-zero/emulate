@@ -1,7 +1,7 @@
 ---
 name: emulate
-description: Local drop-in API emulator for Vercel, GitHub, and Google. Use when the user needs to start emulated services, configure seed data, write tests against local APIs, set up CI without network access, or work with the emulate CLI or programmatic API. Triggers include "start the emulator", "emulate services", "mock API locally", "create emulator config", "test against local API", "npx emulate", or any task requiring local service emulation.
-allowed-tools: Bash(npx emulate:*), Bash(emulate:*)
+description: Local drop-in API emulator for Vercel, GitHub, and Google. Use when the user needs to start emulated services, configure seed data, write tests against local APIs, set up CI without network access, or work with the emulate CLI or programmatic API. Triggers include "start the emulator", "emulate services", "mock API locally", "create emulator config", "test against local API", "npx @inbox-zero/emulate", or any task requiring local service emulation.
+allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(emulate:*)
 ---
 
 # Service Emulation with emulate
@@ -11,7 +11,7 @@ Local drop-in replacement services for CI and no-network sandboxes. Fully statef
 ## Quick Start
 
 ```bash
-npx emulate
+npx @inbox-zero/emulate
 ```
 
 All services start with sensible defaults:
@@ -60,13 +60,13 @@ The port can also be set via `EMULATE_PORT` or `PORT` environment variables.
 ## Programmatic API
 
 ```bash
-npm install emulate
+npm install @inbox-zero/emulate
 ```
 
 Each call to `createEmulator` starts a single service:
 
 ```typescript
-import { createEmulator } from 'emulate'
+import { createEmulator } from '@inbox-zero/emulate'
 
 const github = await createEmulator({ service: 'github', port: 4001 })
 const vercel = await createEmulator({ service: 'vercel', port: 4002 })
@@ -97,7 +97,7 @@ await vercel.close()
 ## Vitest / Jest Setup
 
 ```typescript
-import { createEmulator, type Emulator } from 'emulate'
+import { createEmulator, type Emulator } from '@inbox-zero/emulate'
 
 let github: Emulator
 let vercel: Emulator

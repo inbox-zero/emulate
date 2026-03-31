@@ -1,7 +1,7 @@
 ---
 name: google
 description: Emulated Google OAuth 2.0 and OpenID Connect for local development and testing. Use when the user needs to test Google sign-in locally, emulate OIDC discovery, handle Google token exchange, configure Google OAuth clients, or work with Google userinfo without hitting real Google APIs. Triggers include "Google OAuth", "emulate Google", "mock Google login", "test Google sign-in", "OIDC emulator", "Google OIDC", "local Google auth", or any task requiring a local Google OAuth/OIDC provider.
-allowed-tools: Bash(npx emulate:*), Bash(emulate:*), Bash(curl:*)
+allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(emulate:*), Bash(curl:*)
 ---
 
 # Google OAuth 2.0 / OIDC Emulator
@@ -12,7 +12,7 @@ OAuth 2.0 and OpenID Connect emulation with authorization code flow, PKCE suppor
 
 ```bash
 # Google only
-npx emulate --service google
+npx @inbox-zero/emulate --service google
 
 # Default port
 # http://localhost:4002
@@ -21,7 +21,7 @@ npx emulate --service google
 Or programmatically:
 
 ```typescript
-import { createEmulator } from 'emulate'
+import { createEmulator } from '@inbox-zero/emulate'
 
 const google = await createEmulator({ service: 'google', port: 4002 })
 // google.url === 'http://localhost:4002'

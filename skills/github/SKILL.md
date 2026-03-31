@@ -1,7 +1,7 @@
 ---
 name: github
 description: Emulated GitHub REST API for local development and testing. Use when the user needs to interact with GitHub API endpoints locally, test GitHub integrations, emulate repos/issues/PRs, set up GitHub OAuth flows, configure GitHub Apps, or test webhooks without hitting the real GitHub API. Triggers include "GitHub API", "emulate GitHub", "mock GitHub", "test GitHub OAuth", "GitHub App JWT", "local GitHub", or any task requiring a local GitHub API.
-allowed-tools: Bash(npx emulate:*), Bash(emulate:*), Bash(curl:*)
+allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(emulate:*), Bash(curl:*)
 ---
 
 # GitHub API Emulator
@@ -12,7 +12,7 @@ Fully stateful GitHub REST API emulation. Creates, updates, and deletes persist 
 
 ```bash
 # GitHub only
-npx emulate --service github
+npx @inbox-zero/emulate --service github
 
 # Default port
 # http://localhost:4001
@@ -21,7 +21,7 @@ npx emulate --service github
 Or programmatically:
 
 ```typescript
-import { createEmulator } from 'emulate'
+import { createEmulator } from '@inbox-zero/emulate'
 
 const github = await createEmulator({ service: 'github', port: 4001 })
 // github.url === 'http://localhost:4001'

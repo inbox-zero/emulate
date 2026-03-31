@@ -164,8 +164,8 @@ function emuBar(service?: string): string {
   return `<div class="emu-bar">
   <span class="emu-bar-title">${title}</span>
   <nav class="emu-bar-links">
-    <a href="https://github.com/vercel-labs/emulate/issues" target="_blank" rel="noopener"><span class="full">Report Issue</span><span class="short">Report</span></a>
-    <a href="https://github.com/vercel-labs/emulate" target="_blank" rel="noopener"><span class="full">Source Code</span><span class="short">Source</span></a>
+    <a href="https://github.com/inbox-zero/emulate/issues" target="_blank" rel="noopener"><span class="full">Report Issue</span><span class="short">Report</span></a>
+    <a href="https://github.com/inbox-zero/emulate" target="_blank" rel="noopener"><span class="full">Source Code</span><span class="short">Source</span></a>
     <a href="https://emulate.dev" target="_blank" rel="noopener"><span class="full">Learn More</span><span class="short">Learn</span></a>
   </nav>
 </div>`;
