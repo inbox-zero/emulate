@@ -136,7 +136,10 @@ export function getMicrosoftUserByEmail(ms: MicrosoftStore, email: string): Micr
   return ms.users.findOneBy("email", email);
 }
 
-export function ensureDefaultFolders(ms: MicrosoftStore, userEmail: string): Record<keyof typeof WELL_KNOWN_FOLDERS, MicrosoftMailFolder> {
+export function ensureDefaultFolders(
+  ms: MicrosoftStore,
+  userEmail: string,
+): Record<keyof typeof WELL_KNOWN_FOLDERS, MicrosoftMailFolder> {
   const result = {} as Record<keyof typeof WELL_KNOWN_FOLDERS, MicrosoftMailFolder>;
 
   for (const [wellKnownName, displayName] of Object.entries(WELL_KNOWN_FOLDERS) as Array<
@@ -172,7 +175,11 @@ export function getFolderByIdOrWellKnownName(
     .find((folder) => folder.microsoft_id === value || folder.well_known_name === value);
 }
 
-export function listChildFolders(ms: MicrosoftStore, userEmail: string, parentFolderId: string | null): MicrosoftMailFolder[] {
+export function listChildFolders(
+  ms: MicrosoftStore,
+  userEmail: string,
+  parentFolderId: string | null,
+): MicrosoftMailFolder[] {
   return ms.mailFolders
     .findBy("user_email", userEmail)
     .filter((folder) => folder.parent_folder_id === parentFolderId)
@@ -250,13 +257,11 @@ export function createCalendarRecord(
     microsoft_id?: string;
   },
 ): MicrosoftCalendar {
-  const existing = ms.calendars
-    .findBy("user_email", input.user_email)
-    .find((calendar) => {
-      if (input.microsoft_id) return calendar.microsoft_id === input.microsoft_id;
-      if (input.is_default_calendar) return calendar.microsoft_id === "primary";
-      return calendar.name.toLowerCase() === input.name.toLowerCase();
-    });
+  const existing = ms.calendars.findBy("user_email", input.user_email).find((calendar) => {
+    if (input.microsoft_id) return calendar.microsoft_id === input.microsoft_id;
+    if (input.is_default_calendar) return calendar.microsoft_id === "primary";
+    return calendar.name.toLowerCase() === input.name.toLowerCase();
+  });
   if (existing) return existing;
 
   return ms.calendars.insert({
@@ -322,12 +327,12 @@ export function createDriveItemRecord(ms: MicrosoftStore, input: MicrosoftDriveI
     name: input.name,
     parent_microsoft_id: input.parent_microsoft_id ?? null,
     is_folder: input.is_folder,
-    mime_type: input.is_folder ? null : input.mime_type ?? "application/octet-stream",
-    size: input.is_folder ? 0 : input.size ?? byteLengthFromBase64(input.content_bytes ?? ""),
+    mime_type: input.is_folder ? null : (input.mime_type ?? "application/octet-stream"),
+    size: input.is_folder ? 0 : (input.size ?? byteLengthFromBase64(input.content_bytes ?? "")),
     web_url: buildDriveItemWebUrl(input.web_url_base, microsoftId),
     created_date_time: new Date().toISOString(),
     last_modified_date_time: new Date().toISOString(),
-    content_bytes: input.is_folder ? null : input.content_bytes ?? null,
+    content_bytes: input.is_folder ? null : (input.content_bytes ?? null),
     deleted: false,
   });
 }
@@ -361,7 +366,7 @@ export function createMessageRecord(ms: MicrosoftStore, input: MicrosoftMessageI
     bcc_recipients: normalizeRecipients(input.bcc_recipients),
     reply_to: normalizeRecipients(input.reply_to),
     received_date_time: input.received_date_time ?? now,
-    sent_date_time: input.sent_date_time ?? (input.is_draft ? null : input.received_date_time ?? now),
+    sent_date_time: input.sent_date_time ?? (input.is_draft ? null : (input.received_date_time ?? now)),
     created_date_time: now,
     last_modified_date_time: now,
     is_draft: input.is_draft ?? false,
@@ -430,7 +435,11 @@ export function buildDriveItemWebUrl(baseUrl: string, driveItemId: string): stri
 }
 
 export function buildBodyPreview(content: string): string {
-  return content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+  return content
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
 }
 
 export function normalizeRecipients(
@@ -444,9 +453,7 @@ export function normalizeRecipients(
     }));
 }
 
-export function toGraphRecipients(
-  recipients: Array<{ name?: string | null; address: string }>,
-): GraphRecipient[] {
+export function toGraphRecipients(recipients: Array<{ name?: string | null; address: string }>): GraphRecipient[] {
   return recipients.map((recipient) => ({
     emailAddress: {
       address: recipient.address,
@@ -455,7 +462,11 @@ export function toGraphRecipients(
   }));
 }
 
-export function formatFolderResource(ms: MicrosoftStore, folder: MicrosoftMailFolder, userEmail: string): Record<string, unknown> {
+export function formatFolderResource(
+  ms: MicrosoftStore,
+  folder: MicrosoftMailFolder,
+  userEmail: string,
+): Record<string, unknown> {
   const children = listChildFolders(ms, userEmail, folder.microsoft_id);
   return {
     id: folder.microsoft_id,
@@ -533,7 +544,10 @@ export function formatCalendarEventResource(event: MicrosoftCalendarEvent): Reco
   };
 }
 
-export function formatDriveItemResource(item: MicrosoftDriveItem, parent?: MicrosoftDriveItem | null): Record<string, unknown> {
+export function formatDriveItemResource(
+  item: MicrosoftDriveItem,
+  parent?: MicrosoftDriveItem | null,
+): Record<string, unknown> {
   const parentPath = parent ? `/drive/root:/${buildDrivePath(parent)}` : "/drive/root:";
 
   return {
@@ -543,9 +557,7 @@ export function formatDriveItemResource(item: MicrosoftDriveItem, parent?: Micro
     size: item.size,
     createdDateTime: item.created_date_time,
     lastModifiedDateTime: item.last_modified_date_time,
-    parentReference: item.parent_microsoft_id
-      ? { id: item.parent_microsoft_id, path: parentPath }
-      : undefined,
+    parentReference: item.parent_microsoft_id ? { id: item.parent_microsoft_id, path: parentPath } : undefined,
     folder: item.is_folder ? {} : undefined,
     file: !item.is_folder ? { mimeType: item.mime_type ?? "application/octet-stream" } : undefined,
     deleted: item.deleted ? {} : undefined,
@@ -624,15 +636,25 @@ export function buildDrivePath(item: MicrosoftDriveItem, items?: MicrosoftDriveI
   return segments.join("/");
 }
 
-export function updateMessage(ms: MicrosoftStore, message: MicrosoftMessage, patch: Partial<MicrosoftMessage>): MicrosoftMessage {
+export function updateMessage(
+  ms: MicrosoftStore,
+  message: MicrosoftMessage,
+  patch: Partial<MicrosoftMessage>,
+): MicrosoftMessage {
   return ms.messages.update(message.id, {
     ...patch,
-    body_preview: patch.body_content ? buildBodyPreview(patch.body_content) : patch.body_preview ?? message.body_preview,
+    body_preview: patch.body_content
+      ? buildBodyPreview(patch.body_content)
+      : (patch.body_preview ?? message.body_preview),
     last_modified_date_time: new Date().toISOString(),
   })!;
 }
 
-export function moveMessage(ms: MicrosoftStore, message: MicrosoftMessage, destinationFolderId: string): MicrosoftMessage {
+export function moveMessage(
+  ms: MicrosoftStore,
+  message: MicrosoftMessage,
+  destinationFolderId: string,
+): MicrosoftMessage {
   const destination = ms.mailFolders.findOneBy("microsoft_id", destinationFolderId);
   if (!destination) {
     throw new Error(`Destination folder not found: ${destinationFolderId}`);
@@ -676,7 +698,9 @@ export function createReplyDraft(
     from: userRecipient,
     sender: userRecipient,
     to_recipients: toRecipients,
-    cc_recipients: options.replyAll ? original.cc_recipients.filter((recipient) => recipient.address !== userEmail) : [],
+    cc_recipients: options.replyAll
+      ? original.cc_recipients.filter((recipient) => recipient.address !== userEmail)
+      : [],
     reply_to: [],
     received_date_time: new Date().toISOString(),
     sent_date_time: null,
@@ -720,7 +744,10 @@ export function seedDefaultMailbox(ms: MicrosoftStore, baseUrl: string, userEmai
     location_display_name: "Teams",
     web_link: `${baseUrl}/calendar/events/evt_primary`,
     online_meeting_join_url: `${baseUrl}/meet/inbox-zero-planning`,
-    attendees: [{ address: userEmail, name: "Test User" }, { address: "teammate@example.com", name: "Teammate" }],
+    attendees: [
+      { address: userEmail, name: "Test User" },
+      { address: "teammate@example.com", name: "Teammate" },
+    ],
   });
   createCalendarEventRecord(ms, {
     user_email: userEmail,
@@ -774,8 +801,7 @@ export function seedDefaultMailbox(ms: MicrosoftStore, baseUrl: string, userEmai
     conversation_id: `${scoped}_conv_planning`,
     user_email: userEmail,
     subject: "Can you share your availability tomorrow?",
-    body_content:
-      "<p>Could you send over some times that work tomorrow afternoon?</p><p>I can do 1pm or 4pm UTC.</p>",
+    body_content: "<p>Could you send over some times that work tomorrow afternoon?</p><p>I can do 1pm or 4pm UTC.</p>",
     body_content_type: "html",
     from: { address: "alex@example.com", name: "Alex" },
     sender: { address: "alex@example.com", name: "Alex" },
@@ -922,7 +948,10 @@ function messageField(message: MicrosoftMessage, field: string): string | boolea
   }
 }
 
-export function filterMessages(messages: MicrosoftMessage[], filterExpression: string | null | undefined): MicrosoftMessage[] {
+export function filterMessages(
+  messages: MicrosoftMessage[],
+  filterExpression: string | null | undefined,
+): MicrosoftMessage[] {
   if (!filterExpression) return messages;
 
   return messages.filter((message) => evaluateMessageFilter(message, stripWrappingParens(filterExpression)));
@@ -943,7 +972,9 @@ function evaluateMessageFilter(message: MicrosoftMessage, expression: string): b
   if (containsMatch) {
     const field = containsMatch[1]?.trim() ?? "";
     const value = parseQuotedValue(containsMatch[2] ?? "").toLowerCase();
-    return String(messageField(message, field) ?? "").toLowerCase().includes(value);
+    return String(messageField(message, field) ?? "")
+      .toLowerCase()
+      .includes(value);
   }
 
   const categoriesAnyMatch = expression.match(/^categories\/any\(\w+:\w+\s+eq\s+('(?:[^']|'')*')\)$/);
@@ -983,7 +1014,10 @@ function evaluateMessageFilter(message: MicrosoftMessage, expression: string): b
   return true;
 }
 
-export function searchMessages(messages: MicrosoftMessage[], searchExpression: string | null | undefined): MicrosoftMessage[] {
+export function searchMessages(
+  messages: MicrosoftMessage[],
+  searchExpression: string | null | undefined,
+): MicrosoftMessage[] {
   if (!searchExpression) return messages;
 
   const raw = parseQuotedValue(searchExpression);
@@ -1017,7 +1051,10 @@ export function searchMessages(messages: MicrosoftMessage[], searchExpression: s
   );
 }
 
-export function sortMessages(messages: MicrosoftMessage[], orderByExpression: string | null | undefined): MicrosoftMessage[] {
+export function sortMessages(
+  messages: MicrosoftMessage[],
+  orderByExpression: string | null | undefined,
+): MicrosoftMessage[] {
   if (!orderByExpression) return messages;
   const [field, direction] = orderByExpression.trim().split(/\s+/);
   const desc = (direction ?? "asc").toLowerCase() === "desc";
@@ -1028,7 +1065,10 @@ export function sortMessages(messages: MicrosoftMessage[], orderByExpression: st
   });
 }
 
-export function filterDriveItems(items: MicrosoftDriveItem[], filterExpression: string | null | undefined): MicrosoftDriveItem[] {
+export function filterDriveItems(
+  items: MicrosoftDriveItem[],
+  filterExpression: string | null | undefined,
+): MicrosoftDriveItem[] {
   if (!filterExpression) return items;
   if (filterExpression.trim() === "folder ne null") {
     return items.filter((item) => item.is_folder && !item.deleted);

@@ -105,9 +105,7 @@ function getTopAndSkip(c: any) {
 
 function resolveMessage(ctx: RouteContext, userEmail: string, messageId: string) {
   const ms = getMicrosoftStore(ctx.store);
-  return ms.messages
-    .findBy("user_email", userEmail)
-    .find((message) => message.microsoft_id === messageId);
+  return ms.messages.findBy("user_email", userEmail).find((message) => message.microsoft_id === messageId);
 }
 
 function resolveFolder(ctx: RouteContext, userEmail: string, folderId: string) {
@@ -117,20 +115,14 @@ function resolveFolder(ctx: RouteContext, userEmail: string, folderId: string) {
 function resolveCalendar(ctx: RouteContext, userEmail: string, calendarId: string) {
   const ms = getMicrosoftStore(ctx.store);
   if (calendarId === "primary") {
-    return ms.calendars
-      .findBy("user_email", userEmail)
-      .find((entry) => entry.is_default_calendar) ?? null;
+    return ms.calendars.findBy("user_email", userEmail).find((entry) => entry.is_default_calendar) ?? null;
   }
-  return ms.calendars
-    .findBy("user_email", userEmail)
-    .find((entry) => entry.microsoft_id === calendarId) ?? null;
+  return ms.calendars.findBy("user_email", userEmail).find((entry) => entry.microsoft_id === calendarId) ?? null;
 }
 
 function resolveCalendarEvent(ctx: RouteContext, userEmail: string, eventId: string) {
   const ms = getMicrosoftStore(ctx.store);
-  return ms.calendarEvents
-    .findBy("user_email", userEmail)
-    .find((entry) => entry.microsoft_id === eventId) ?? null;
+  return ms.calendarEvents.findBy("user_email", userEmail).find((entry) => entry.microsoft_id === eventId) ?? null;
 }
 
 function patchMessageFromBody(ctx: RouteContext, messageId: string, body: Record<string, unknown>) {
@@ -170,12 +162,14 @@ function patchMessageFromBody(ctx: RouteContext, messageId: string, body: Record
   if (body.from && typeof body.from === "object" && !Array.isArray(body.from)) {
     const emailAddress = (body.from as Record<string, unknown>).emailAddress;
     if (emailAddress && typeof emailAddress === "object" && !Array.isArray(emailAddress)) {
-      patch.from_address = typeof (emailAddress as Record<string, unknown>).address === "string"
-        ? (emailAddress as Record<string, unknown>).address
-        : message.from_address;
-      patch.from_name = typeof (emailAddress as Record<string, unknown>).name === "string"
-        ? (emailAddress as Record<string, unknown>).name
-        : message.from_name;
+      patch.from_address =
+        typeof (emailAddress as Record<string, unknown>).address === "string"
+          ? (emailAddress as Record<string, unknown>).address
+          : message.from_address;
+      patch.from_name =
+        typeof (emailAddress as Record<string, unknown>).name === "string"
+          ? (emailAddress as Record<string, unknown>).name
+          : message.from_name;
       patch.sender_address = patch.from_address;
       patch.sender_name = patch.from_name;
     }
@@ -256,11 +250,17 @@ export function graphRoutes(ctx: RouteContext): void {
       user_email: authEmail,
       subject: typeof body.subject === "string" ? body.subject : "",
       body_content:
-        body.body && typeof body.body === "object" && !Array.isArray(body.body) && typeof (body.body as Record<string, unknown>).content === "string"
-          ? (body.body as Record<string, unknown>).content as string
+        body.body &&
+        typeof body.body === "object" &&
+        !Array.isArray(body.body) &&
+        typeof (body.body as Record<string, unknown>).content === "string"
+          ? ((body.body as Record<string, unknown>).content as string)
           : "",
       body_content_type:
-        body.body && typeof body.body === "object" && !Array.isArray(body.body) && (body.body as Record<string, unknown>).contentType === "text"
+        body.body &&
+        typeof body.body === "object" &&
+        !Array.isArray(body.body) &&
+        (body.body as Record<string, unknown>).contentType === "text"
           ? "text"
           : "html",
       from: { address: authEmail, name: getMicrosoftUserByEmail(ms, authEmail)?.name },
@@ -292,12 +292,16 @@ export function graphRoutes(ctx: RouteContext): void {
       user_email: authEmail,
       subject: typeof messageRecord.subject === "string" ? messageRecord.subject : "",
       body_content:
-        messageRecord.body && typeof messageRecord.body === "object" && !Array.isArray(messageRecord.body) &&
+        messageRecord.body &&
+        typeof messageRecord.body === "object" &&
+        !Array.isArray(messageRecord.body) &&
         typeof (messageRecord.body as Record<string, unknown>).content === "string"
-          ? (messageRecord.body as Record<string, unknown>).content as string
+          ? ((messageRecord.body as Record<string, unknown>).content as string)
           : "",
       body_content_type:
-        messageRecord.body && typeof messageRecord.body === "object" && !Array.isArray(messageRecord.body) &&
+        messageRecord.body &&
+        typeof messageRecord.body === "object" &&
+        !Array.isArray(messageRecord.body) &&
         (messageRecord.body as Record<string, unknown>).contentType === "text"
           ? "text"
           : "html",
@@ -404,7 +408,9 @@ export function graphRoutes(ctx: RouteContext): void {
       body_content_type: "html",
       from: { address: authEmail, name: getMicrosoftUserByEmail(ms, authEmail)?.name },
       sender: { address: authEmail, name: getMicrosoftUserByEmail(ms, authEmail)?.name },
-      to_recipients: original.from_address ? [{ address: original.from_address, name: original.from_name ?? undefined }] : [],
+      to_recipients: original.from_address
+        ? [{ address: original.from_address, name: original.from_name ?? undefined }]
+        : [],
       is_draft: false,
       is_read: true,
       parent_folder_id: folders.sentitems.microsoft_id,
@@ -465,9 +471,11 @@ export function graphRoutes(ctx: RouteContext): void {
       conversation_id: generateMicrosoftId("conv"),
       subject: typeof messageRecord.subject === "string" ? messageRecord.subject : `Fwd: ${original.subject}`,
       body_content:
-        messageRecord.body && typeof messageRecord.body === "object" && !Array.isArray(messageRecord.body) &&
+        messageRecord.body &&
+        typeof messageRecord.body === "object" &&
+        !Array.isArray(messageRecord.body) &&
         typeof (messageRecord.body as Record<string, unknown>).content === "string"
-          ? (messageRecord.body as Record<string, unknown>).content as string
+          ? ((messageRecord.body as Record<string, unknown>).content as string)
           : "",
       body_content_type: "html",
       from: { address: authEmail, name: getMicrosoftUserByEmail(ms, authEmail)?.name },
@@ -510,8 +518,7 @@ export function graphRoutes(ctx: RouteContext): void {
       .findBy("user_email", authEmail)
       .find(
         (entry) =>
-          entry.message_microsoft_id === c.req.param("messageId") &&
-          entry.microsoft_id === c.req.param("attachmentId"),
+          entry.message_microsoft_id === c.req.param("messageId") && entry.microsoft_id === c.req.param("attachmentId"),
       );
     if (!attachment) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Attachment not found.");
     return c.json(formatAttachmentResource(attachment));
@@ -524,9 +531,7 @@ export function graphRoutes(ctx: RouteContext): void {
     const message = resolveMessage(ctx, authEmail, c.req.param("messageId"));
     if (!message) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Message not found.");
     return c.json({
-      value: ms.attachments
-        .findBy("message_microsoft_id", message.microsoft_id)
-        .map(formatAttachmentResource),
+      value: ms.attachments.findBy("message_microsoft_id", message.microsoft_id).map(formatAttachmentResource),
     });
   });
 
@@ -563,7 +568,8 @@ export function graphRoutes(ctx: RouteContext): void {
       userEmail: authEmail,
       messageId: message.microsoft_id,
       attachmentName: typeof attachmentItem.name === "string" ? attachmentItem.name : "attachment.bin",
-      contentType: typeof attachmentItem.contentType === "string" ? attachmentItem.contentType : "application/octet-stream",
+      contentType:
+        typeof attachmentItem.contentType === "string" ? attachmentItem.contentType : "application/octet-stream",
       totalSize: typeof attachmentItem.size === "number" ? attachmentItem.size : 0,
       uploadedBytes: 0,
       contentChunks: [],
@@ -623,9 +629,12 @@ export function graphRoutes(ctx: RouteContext): void {
       return c.json(formatAttachmentResource(attachment), 201);
     }
 
-    return c.json({
-      nextExpectedRanges: [`${updatedBytes}-`],
-    }, 202);
+    return c.json(
+      {
+        nextExpectedRanges: [`${updatedBytes}-`],
+      },
+      202,
+    );
   });
 
   app.get("/v1.0/me/mailFolders", (c) => {
@@ -635,13 +644,11 @@ export function graphRoutes(ctx: RouteContext): void {
     const filter = c.req.query("$filter");
     const folders = filter
       ? ensureDefaultFolders(ms, authEmail) &&
-        ms.mailFolders
-          .findBy("user_email", authEmail)
-          .filter((folder) => {
-            const match = filter.match(/^displayName eq '(.+)'$/);
-            if (!match) return true;
-            return folder.display_name === match[1]?.replace(/''/g, "'");
-          })
+        ms.mailFolders.findBy("user_email", authEmail).filter((folder) => {
+          const match = filter.match(/^displayName eq '(.+)'$/);
+          if (!match) return true;
+          return folder.display_name === match[1]?.replace(/''/g, "'");
+        })
       : ms.mailFolders.findBy("user_email", authEmail).filter((folder) => folder.parent_folder_id === null);
 
     return c.json({
@@ -721,9 +728,10 @@ export function graphRoutes(ctx: RouteContext): void {
     if (existing) {
       return microsoftGraphError(c, 409, "ErrorAlreadyExists", "Category already exists.");
     }
-    const color = typeof body.color === "string" && OUTLOOK_COLORS.includes(body.color as any)
-      ? (body.color as string)
-      : OUTLOOK_COLORS[0];
+    const color =
+      typeof body.color === "string" && OUTLOOK_COLORS.includes(body.color as any)
+        ? (body.color as string)
+        : OUTLOOK_COLORS[0];
     const created = createCategoryRecord(ms, { user_email: authEmail, display_name: displayName, color });
     return c.json(formatCategoryResource(created), 201);
   });
@@ -766,9 +774,7 @@ export function graphRoutes(ctx: RouteContext): void {
     const ms = getMicrosoftStore(ctx.store);
     const body = await parseJsonBody(c);
     const displayName = typeof body.displayName === "string" ? body.displayName : "Rule";
-    const existing = ms.messageRules
-      .findBy("user_email", authEmail)
-      .find((rule) => rule.display_name === displayName);
+    const existing = ms.messageRules.findBy("user_email", authEmail).find((rule) => rule.display_name === displayName);
     if (existing) {
       return microsoftGraphError(c, 409, "ErrorAlreadyExists", "Rule already exists.");
     }
@@ -780,21 +786,29 @@ export function graphRoutes(ctx: RouteContext): void {
       is_enabled: body.isEnabled !== false,
       conditions:
         body.conditions && typeof body.conditions === "object" && !Array.isArray(body.conditions)
-          ? { senderContains: Array.isArray((body.conditions as Record<string, unknown>).senderContains)
-              ? ((body.conditions as Record<string, unknown>).senderContains as unknown[]).filter((value): value is string => typeof value === "string")
-              : undefined }
+          ? {
+              senderContains: Array.isArray((body.conditions as Record<string, unknown>).senderContains)
+                ? ((body.conditions as Record<string, unknown>).senderContains as unknown[]).filter(
+                    (value): value is string => typeof value === "string",
+                  )
+                : undefined,
+            }
           : {},
       actions:
         body.actions && typeof body.actions === "object" && !Array.isArray(body.actions)
           ? {
-              moveToFolder: typeof (body.actions as Record<string, unknown>).moveToFolder === "string"
-                ? (body.actions as Record<string, unknown>).moveToFolder as string
-                : undefined,
-              markAsRead: typeof (body.actions as Record<string, unknown>).markAsRead === "boolean"
-                ? (body.actions as Record<string, unknown>).markAsRead as boolean
-                : undefined,
+              moveToFolder:
+                typeof (body.actions as Record<string, unknown>).moveToFolder === "string"
+                  ? ((body.actions as Record<string, unknown>).moveToFolder as string)
+                  : undefined,
+              markAsRead:
+                typeof (body.actions as Record<string, unknown>).markAsRead === "boolean"
+                  ? ((body.actions as Record<string, unknown>).markAsRead as boolean)
+                  : undefined,
               assignCategories: Array.isArray((body.actions as Record<string, unknown>).assignCategories)
-                ? ((body.actions as Record<string, unknown>).assignCategories as unknown[]).filter((value): value is string => typeof value === "string")
+                ? ((body.actions as Record<string, unknown>).assignCategories as unknown[]).filter(
+                    (value): value is string => typeof value === "string",
+                  )
                 : undefined,
             }
           : {},
@@ -817,21 +831,29 @@ export function graphRoutes(ctx: RouteContext): void {
       is_enabled: typeof body.isEnabled === "boolean" ? body.isEnabled : existing.is_enabled,
       conditions:
         body.conditions && typeof body.conditions === "object" && !Array.isArray(body.conditions)
-          ? { senderContains: Array.isArray((body.conditions as Record<string, unknown>).senderContains)
-              ? ((body.conditions as Record<string, unknown>).senderContains as unknown[]).filter((value): value is string => typeof value === "string")
-              : existing.conditions.senderContains }
+          ? {
+              senderContains: Array.isArray((body.conditions as Record<string, unknown>).senderContains)
+                ? ((body.conditions as Record<string, unknown>).senderContains as unknown[]).filter(
+                    (value): value is string => typeof value === "string",
+                  )
+                : existing.conditions.senderContains,
+            }
           : existing.conditions,
       actions:
         body.actions && typeof body.actions === "object" && !Array.isArray(body.actions)
           ? {
-              moveToFolder: typeof (body.actions as Record<string, unknown>).moveToFolder === "string"
-                ? (body.actions as Record<string, unknown>).moveToFolder as string
-                : existing.actions.moveToFolder,
-              markAsRead: typeof (body.actions as Record<string, unknown>).markAsRead === "boolean"
-                ? (body.actions as Record<string, unknown>).markAsRead as boolean
-                : existing.actions.markAsRead,
+              moveToFolder:
+                typeof (body.actions as Record<string, unknown>).moveToFolder === "string"
+                  ? ((body.actions as Record<string, unknown>).moveToFolder as string)
+                  : existing.actions.moveToFolder,
+              markAsRead:
+                typeof (body.actions as Record<string, unknown>).markAsRead === "boolean"
+                  ? ((body.actions as Record<string, unknown>).markAsRead as boolean)
+                  : existing.actions.markAsRead,
               assignCategories: Array.isArray((body.actions as Record<string, unknown>).assignCategories)
-                ? ((body.actions as Record<string, unknown>).assignCategories as unknown[]).filter((value): value is string => typeof value === "string")
+                ? ((body.actions as Record<string, unknown>).assignCategories as unknown[]).filter(
+                    (value): value is string => typeof value === "string",
+                  )
                 : existing.actions.assignCategories,
             }
           : existing.actions,
@@ -863,7 +885,9 @@ export function graphRoutes(ctx: RouteContext): void {
       notification_url: typeof body.notificationUrl === "string" ? body.notificationUrl : "",
       resource: typeof body.resource === "string" ? body.resource : "/me/messages",
       expiration_date_time:
-        typeof body.expirationDateTime === "string" ? body.expirationDateTime : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        typeof body.expirationDateTime === "string"
+          ? body.expirationDateTime
+          : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
       client_state: typeof body.clientState === "string" ? body.clientState : null,
     });
     return c.json(formatSubscriptionResource(subscription), 201);
@@ -899,8 +923,11 @@ export function graphRoutes(ctx: RouteContext): void {
         const messageId = url.split("/")[3] ?? "";
         const message = resolveMessage(ctx, authEmail, messageId);
         const destinationId =
-          entry.body && typeof entry.body === "object" && !Array.isArray(entry.body) && typeof (entry.body as Record<string, unknown>).destinationId === "string"
-            ? (entry.body as Record<string, unknown>).destinationId as string
+          entry.body &&
+          typeof entry.body === "object" &&
+          !Array.isArray(entry.body) &&
+          typeof (entry.body as Record<string, unknown>).destinationId === "string"
+            ? ((entry.body as Record<string, unknown>).destinationId as string)
             : "";
         if (!message || !destinationId) {
           return { id, status: 404, body: { error: { message: "Message or destination not found." } } };
@@ -1121,9 +1148,7 @@ export function graphRoutes(ctx: RouteContext): void {
       .findBy("user_email", authEmail)
       .find((entry) => entry.microsoft_id === c.req.param("itemId") && !entry.deleted);
     if (!item) return microsoftGraphError(c, 404, "itemNotFound", "Drive item not found.");
-    const parent = item.parent_microsoft_id
-      ? ms.driveItems.findOneBy("microsoft_id", item.parent_microsoft_id)
-      : null;
+    const parent = item.parent_microsoft_id ? ms.driveItems.findOneBy("microsoft_id", item.parent_microsoft_id) : null;
     return c.json(formatDriveItemResource(item, parent));
   });
 
@@ -1140,9 +1165,12 @@ export function graphRoutes(ctx: RouteContext): void {
       body.parentReference && typeof body.parentReference === "object" && !Array.isArray(body.parentReference)
         ? (body.parentReference as Record<string, unknown>)
         : undefined;
-    const targetParentId = parentReference && "id" in parentReference
-      ? (typeof parentReference.id === "string" ? parentReference.id : null)
-      : item.parent_microsoft_id;
+    const targetParentId =
+      parentReference && "id" in parentReference
+        ? typeof parentReference.id === "string"
+          ? parentReference.id
+          : null
+        : item.parent_microsoft_id;
     const updated = ms.driveItems.update(item.id, {
       name: typeof body.name === "string" ? body.name : item.name,
       parent_microsoft_id: targetParentId ?? null,
@@ -1309,9 +1337,12 @@ export function graphRoutes(ctx: RouteContext): void {
       return c.json(formatDriveItemResource(created, parent), 201);
     }
 
-    return c.json({
-      nextExpectedRanges: [`${session.uploadedBytes}-`],
-    }, 202);
+    return c.json(
+      {
+        nextExpectedRanges: [`${session.uploadedBytes}-`],
+      },
+      202,
+    );
   });
 }
 
@@ -1321,7 +1352,10 @@ function extractRecipients(value: unknown) {
     .map((recipient) => (recipient && typeof recipient === "object" && !Array.isArray(recipient) ? recipient : null))
     .filter((recipient): recipient is Record<string, unknown> => Boolean(recipient))
     .map((recipient) => recipient.emailAddress)
-    .filter((emailAddress): emailAddress is Record<string, unknown> => Boolean(emailAddress) && typeof emailAddress === "object")
+    .filter(
+      (emailAddress): emailAddress is Record<string, unknown> =>
+        Boolean(emailAddress) && typeof emailAddress === "object",
+    )
     .map((emailAddress) => ({
       address: typeof emailAddress.address === "string" ? emailAddress.address : "",
       name: typeof emailAddress.name === "string" ? emailAddress.name : undefined,
@@ -1363,14 +1397,21 @@ async function createCalendarEventFromBody(ctx: RouteContext, c: any, authEmail:
     user_email: authEmail,
     calendar_microsoft_id: calendarId,
     subject: typeof body.subject === "string" ? body.subject : "",
-    body_preview: typeof body.bodyPreview === "string" ? body.bodyPreview : (typeof body.subject === "string" ? body.subject : ""),
+    body_preview:
+      typeof body.bodyPreview === "string" ? body.bodyPreview : typeof body.subject === "string" ? body.subject : "",
     start_date_time:
-      body.start && typeof body.start === "object" && !Array.isArray(body.start) && typeof (body.start as Record<string, unknown>).dateTime === "string"
-        ? (body.start as Record<string, unknown>).dateTime as string
+      body.start &&
+      typeof body.start === "object" &&
+      !Array.isArray(body.start) &&
+      typeof (body.start as Record<string, unknown>).dateTime === "string"
+        ? ((body.start as Record<string, unknown>).dateTime as string)
         : new Date().toISOString(),
     end_date_time:
-      body.end && typeof body.end === "object" && !Array.isArray(body.end) && typeof (body.end as Record<string, unknown>).dateTime === "string"
-        ? (body.end as Record<string, unknown>).dateTime as string
+      body.end &&
+      typeof body.end === "object" &&
+      !Array.isArray(body.end) &&
+      typeof (body.end as Record<string, unknown>).dateTime === "string"
+        ? ((body.end as Record<string, unknown>).dateTime as string)
         : new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     is_all_day: body.isAllDay === true,
     show_as:
@@ -1383,15 +1424,19 @@ async function createCalendarEventFromBody(ctx: RouteContext, c: any, authEmail:
         ? body.showAs
         : "busy",
     location_display_name:
-      body.location && typeof body.location === "object" && !Array.isArray(body.location) &&
+      body.location &&
+      typeof body.location === "object" &&
+      !Array.isArray(body.location) &&
       typeof (body.location as Record<string, unknown>).displayName === "string"
-        ? (body.location as Record<string, unknown>).displayName as string
+        ? ((body.location as Record<string, unknown>).displayName as string)
         : null,
     web_link: typeof body.webLink === "string" ? body.webLink : null,
     online_meeting_join_url:
-      body.onlineMeeting && typeof body.onlineMeeting === "object" && !Array.isArray(body.onlineMeeting) &&
+      body.onlineMeeting &&
+      typeof body.onlineMeeting === "object" &&
+      !Array.isArray(body.onlineMeeting) &&
       typeof (body.onlineMeeting as Record<string, unknown>).joinUrl === "string"
-        ? (body.onlineMeeting as Record<string, unknown>).joinUrl as string
+        ? ((body.onlineMeeting as Record<string, unknown>).joinUrl as string)
         : null,
     online_meeting_url: typeof body.onlineMeetingUrl === "string" ? body.onlineMeetingUrl : null,
     attendees,
@@ -1408,12 +1453,18 @@ async function patchCalendarEventFromBody(ctx: RouteContext, c: any, authEmail: 
     subject: typeof body.subject === "string" ? body.subject : event.subject,
     body_preview: typeof body.bodyPreview === "string" ? body.bodyPreview : event.body_preview,
     start_date_time:
-      body.start && typeof body.start === "object" && !Array.isArray(body.start) && typeof (body.start as Record<string, unknown>).dateTime === "string"
-        ? (body.start as Record<string, unknown>).dateTime as string
+      body.start &&
+      typeof body.start === "object" &&
+      !Array.isArray(body.start) &&
+      typeof (body.start as Record<string, unknown>).dateTime === "string"
+        ? ((body.start as Record<string, unknown>).dateTime as string)
         : event.start_date_time,
     end_date_time:
-      body.end && typeof body.end === "object" && !Array.isArray(body.end) && typeof (body.end as Record<string, unknown>).dateTime === "string"
-        ? (body.end as Record<string, unknown>).dateTime as string
+      body.end &&
+      typeof body.end === "object" &&
+      !Array.isArray(body.end) &&
+      typeof (body.end as Record<string, unknown>).dateTime === "string"
+        ? ((body.end as Record<string, unknown>).dateTime as string)
         : event.end_date_time,
     is_all_day: typeof body.isAllDay === "boolean" ? body.isAllDay : event.is_all_day,
     show_as:
@@ -1426,15 +1477,19 @@ async function patchCalendarEventFromBody(ctx: RouteContext, c: any, authEmail: 
         ? body.showAs
         : event.show_as,
     location_display_name:
-      body.location && typeof body.location === "object" && !Array.isArray(body.location) &&
+      body.location &&
+      typeof body.location === "object" &&
+      !Array.isArray(body.location) &&
       typeof (body.location as Record<string, unknown>).displayName === "string"
-        ? (body.location as Record<string, unknown>).displayName as string
+        ? ((body.location as Record<string, unknown>).displayName as string)
         : event.location_display_name,
     web_link: typeof body.webLink === "string" ? body.webLink : event.web_link,
     online_meeting_join_url:
-      body.onlineMeeting && typeof body.onlineMeeting === "object" && !Array.isArray(body.onlineMeeting) &&
+      body.onlineMeeting &&
+      typeof body.onlineMeeting === "object" &&
+      !Array.isArray(body.onlineMeeting) &&
       typeof (body.onlineMeeting as Record<string, unknown>).joinUrl === "string"
-        ? (body.onlineMeeting as Record<string, unknown>).joinUrl as string
+        ? ((body.onlineMeeting as Record<string, unknown>).joinUrl as string)
         : event.online_meeting_join_url,
     online_meeting_url: typeof body.onlineMeetingUrl === "string" ? body.onlineMeetingUrl : event.online_meeting_url,
     attendees: Array.isArray(body.attendees) ? extractRecipients(body.attendees) : event.attendees,
@@ -1456,7 +1511,7 @@ function listDriveChildren(ctx: RouteContext, c: any, authEmail: string, parentI
     value: items.map((item) =>
       formatDriveItemResource(
         item,
-        item.parent_microsoft_id ? ms.driveItems.findOneBy("microsoft_id", item.parent_microsoft_id) ?? null : null,
+        item.parent_microsoft_id ? (ms.driveItems.findOneBy("microsoft_id", item.parent_microsoft_id) ?? null) : null,
       ),
     ),
     ...(nextSkip != null ? { "@odata.nextLink": buildNextLink(c.req.url, nextSkip) } : {}),
@@ -1484,7 +1539,7 @@ async function createDriveChild(ctx: RouteContext, c: any, authEmail: string, pa
         is_folder: Boolean(body.folder),
         web_url_base: ctx.baseUrl,
       });
-      const parent = parentId ? ms.driveItems.findOneBy("microsoft_id", parentId) ?? null : null;
+      const parent = parentId ? (ms.driveItems.findOneBy("microsoft_id", parentId) ?? null) : null;
       return c.json(formatDriveItemResource(created, parent), 201);
     }
     return microsoftGraphError(c, 409, "nameAlreadyExists", "Drive item already exists.");
@@ -1497,6 +1552,6 @@ async function createDriveChild(ctx: RouteContext, c: any, authEmail: string, pa
     is_folder: Boolean(body.folder),
     web_url_base: ctx.baseUrl,
   });
-  const parent = parentId ? ms.driveItems.findOneBy("microsoft_id", parentId) ?? null : null;
+  const parent = parentId ? (ms.driveItems.findOneBy("microsoft_id", parentId) ?? null) : null;
   return c.json(formatDriveItemResource(created, parent), 201);
 }

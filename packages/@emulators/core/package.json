@@ -35,12 +35,12 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "hono": "^4.12.9",
+    "hono": "^4",
     "jose": "^6.2.2"
   },
   "devDependencies": {
     "tsup": "^8",
     "typescript": "^5.7",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.0"
   }
 }

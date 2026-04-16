@@ -241,4 +241,3 @@ function normalizeParentIds(parentIds: string[] | undefined): string[] {
   const normalized = [...new Set((parentIds ?? ["root"]).filter(Boolean))];
   return normalized.length > 0 ? normalized : ["root"];
 }
-
