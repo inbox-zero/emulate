@@ -50,8 +50,49 @@ emulate list
 | `-p, --port` | `4000` | Base port (auto-increments per service) |
 | `-s, --service` | all | Comma-separated services to enable |
 | `--seed` | auto-detect | Path to seed config (YAML or JSON) |
+| `--base-url` | none | Override advertised base URL (supports `{service}` template) |
+| `--portless` | off | Serve over HTTPS via portless (auto-registers aliases) |
 
 The port can also be set via `EMULATE_PORT` or `PORT` environment variables.
+
+## HTTPS with portless
+
+[portless](https://github.com/vercel-labs/portless) gives emulators trusted HTTPS URLs with auto-generated certs and no browser warnings.
+
+```bash
+# Start the portless proxy (first time only)
+portless proxy start
+
+# Start emulate with portless integration
+emulate start --portless
+```
+
+Each service registers as a portless alias and gets a named HTTPS URL:
+
+```
+github  https://github.emulate.localhost
+google  https://google.emulate.localhost
+slack   https://slack.emulate.localhost
+```
+
+If portless is not installed, emulate will prompt to install it (`npm i -g portless`).
+
+The `--portless` flag overwrites any existing portless aliases matching `*.emulate`. Aliases are removed automatically when emulate shuts down.
+
+For a custom base URL without portless (any reverse proxy), use `--base-url` or the `EMULATE_BASE_URL` env var:
+
+```bash
+emulate start --base-url "https://{service}.myproxy.test"
+```
+
+The `PORTLESS_URL` env var is automatically set by the `portless` CLI wrapper when running a command through it (e.g. `portless github.emulate emulate start`), typically to a value like `https://{service}.emulate.localhost`. It supports `{service}` interpolation, just like `--base-url` and `EMULATE_BASE_URL`. When no explicit `baseUrl` is provided, it is used as a fallback.
+
+Per-service overrides are also supported in the seed config (these take highest priority over all other base URL sources):
+
+```yaml
+github:
+  baseUrl: https://github.emulate.localhost
+```
 
 ## Programmatic API
 
@@ -103,6 +144,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
 | `service` | *(required)* | Service name: `'vercel'`, `'github'`, `'google'`, `'slack'`, `'apple'`, `'microsoft'`, or `'aws'` |
 | `port` | `4000` | Port for the HTTP server |
 | `seed` | none | Inline seed data (same shape as YAML config) |
+| `baseUrl` | none | Override advertised base URL. Per-service `baseUrl` in seed config takes highest priority, then this option, then `EMULATE_BASE_URL` env var (supports `{service}`), then `PORTLESS_URL` (supports `{service}`, automatically set by the `portless` CLI wrapper), then `http://localhost:<port>`. |
 
 ### Instance methods
 
