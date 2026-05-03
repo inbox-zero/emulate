@@ -22,45 +22,52 @@ export function Search() {
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const resetSearch = useCallback(() => {
+    setQuery("");
+    setResults([]);
+    setLoading(false);
+    setActiveIndex(0);
+  }, []);
+
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      setOpen(nextOpen);
+      if (!nextOpen) resetSearch();
+    },
+    [resetSearch],
+  );
+
   const navigate = useCallback(
     (href: string) => {
-      setOpen(false);
-      setQuery("");
-      setResults([]);
+      handleOpenChange(false);
       router.push(href);
     },
-    [router]
+    [handleOpenChange, router],
   );
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((prev) => !prev);
+        handleOpenChange(!open);
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [handleOpenChange, open]);
 
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 0);
-    } else {
-      setQuery("");
-      setResults([]);
     }
   }, [open]);
 
   useEffect(() => {
     const q = query.trim();
     if (!q) {
-      setResults([]);
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -73,6 +80,7 @@ export function Search() {
         if (res.ok) {
           const data = await res.json();
           setResults(data.results);
+          setActiveIndex(0);
         }
       } catch {
         // aborted or network error
@@ -88,10 +96,6 @@ export function Search() {
       controller.abort();
     };
   }, [query]);
-
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [results]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
@@ -113,13 +117,33 @@ export function Search() {
 
   const hasQuery = query.trim().length > 0;
 
+  function handleQueryChange(value: string) {
+    setQuery(value);
+    if (!value.trim()) {
+      resetSearch();
+    } else {
+      setLoading(true);
+      setActiveIndex(0);
+    }
+  }
+
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => handleOpenChange(true)}
         className="hidden sm:flex items-center gap-2 rounded-md border border-border/50 bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/25 transition-colors"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.3-4.3" />
         </svg>
@@ -130,35 +154,66 @@ export function Search() {
       </button>
 
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => handleOpenChange(true)}
         className="sm:hidden flex items-center text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Search docs"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.3-4.3" />
         </svg>
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent showCloseButton={false} className="gap-0 p-0 sm:max-w-lg">
           <DialogTitle className="sr-only">Search documentation</DialogTitle>
           <div className="flex items-center gap-2 border-b border-border/50 px-3">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted-foreground">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0 text-muted-foreground"
+            >
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.3-4.3" />
             </svg>
             <input
               ref={inputRef}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => handleQueryChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search docs..."
               className="flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
             />
             {query && (
-              <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button onClick={resetSearch} className="text-muted-foreground hover:text-foreground">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M18 6 6 18" />
                   <path d="m6 6 12 12" />
                 </svg>
@@ -174,9 +229,7 @@ export function Search() {
             ) : hasQuery && results.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">No results found.</p>
             ) : !hasQuery ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Type to search documentation...
-              </p>
+              <p className="py-6 text-center text-sm text-muted-foreground">Type to search documentation...</p>
             ) : (
               results.map((item, i) => (
                 <button
@@ -186,14 +239,12 @@ export function Search() {
                   onMouseEnter={() => setActiveIndex(i)}
                   className={cn(
                     "flex w-full flex-col gap-1 rounded-md px-3 py-2 text-left transition-colors",
-                    i === activeIndex ? "bg-muted text-foreground" : "text-foreground"
+                    i === activeIndex ? "bg-muted text-foreground" : "text-foreground",
                   )}
                 >
                   <span className="text-sm font-medium">{item.title}</span>
                   {item.snippet && (
-                    <span className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                      {item.snippet}
-                    </span>
+                    <span className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">{item.snippet}</span>
                   )}
                 </button>
               ))

@@ -65,7 +65,7 @@ async function createIdToken(
   user: GoogleUser,
   clientId: string,
   nonce: string | null,
-  baseUrl: string
+  baseUrl: string,
 ): Promise<string> {
   const builder = new SignJWT({
     sub: user.uid,
@@ -76,6 +76,7 @@ async function createIdToken(
     family_name: user.family_name,
     picture: user.picture,
     locale: user.locale,
+    ...(user.hd ? { hd: user.hd } : {}),
     ...(nonce ? { nonce } : {}),
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
@@ -106,8 +107,15 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       scopes_supported: ["openid", "email", "profile"],
       token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
       claims_supported: [
-        "sub", "email", "email_verified", "name",
-        "given_name", "family_name", "picture", "locale",
+        "sub",
+        "email",
+        "email_verified",
+        "name",
+        "given_name",
+        "family_name",
+        "picture",
+        "locale",
+        "hd",
       ],
       code_challenge_methods_supported: ["plain", "S256"],
     });
@@ -137,13 +145,17 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       if (!client) {
         return c.html(
           renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
-          400
+          400,
         );
       }
       if (redirect_uri && !matchesRedirectUri(redirect_uri, client.redirect_uris)) {
         return c.html(
-          renderErrorPage("Redirect URI mismatch", "The redirect_uri is not registered for this application.", SERVICE_LABEL),
-          400
+          renderErrorPage(
+            "Redirect URI mismatch",
+            "The redirect_uri is not registered for this application.",
+            SERVICE_LABEL,
+          ),
+          400,
         );
       }
       clientName = client.name;
@@ -176,9 +188,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       })
       .join("\n");
 
-    const body = users.length === 0
-      ? '<p class="empty">No users in the emulator store.</p>'
-      : userButtons;
+    const body = users.length === 0 ? '<p class="empty">No users in the emulator store.</p>' : userButtons;
 
     return c.html(renderCardPage("Sign in to Google", subtitleText, body, SERVICE_LABEL));
   });
@@ -226,7 +236,11 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
 
     let body: Record<string, unknown>;
     if (contentType.includes("application/json")) {
-      try { body = JSON.parse(rawText); } catch { body = {}; }
+      try {
+        body = JSON.parse(rawText);
+      } catch {
+        body = {};
+      }
     } else {
       body = Object.fromEntries(new URLSearchParams(rawText));
     }
@@ -280,7 +294,13 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     }
 
     if (grant_type !== "authorization_code") {
-      return c.json({ error: "unsupported_grant_type", error_description: "Only authorization_code and refresh_token are supported." }, 400);
+      return c.json(
+        {
+          error: "unsupported_grant_type",
+          error_description: "Only authorization_code and refresh_token are supported.",
+        },
+        400,
+      );
     }
 
     const pendingMap = getPendingCodes(store);
@@ -368,6 +388,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       family_name: user.family_name,
       picture: user.picture,
       locale: user.locale,
+      ...(user.hd ? { hd: user.hd } : {}),
     });
   });
 
