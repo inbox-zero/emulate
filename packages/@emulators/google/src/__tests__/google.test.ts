@@ -212,10 +212,7 @@ async function formRequest(app: Hono, path: string, body: Record<string, string>
 
 function buildBatchRequestBody(paths: string[]): string {
   return [
-    ...paths.map(
-      (path) =>
-        `--batch_boundary\r\nContent-Type: application/http\r\n\r\nGET ${path}\r\n`,
-    ),
+    ...paths.map((path) => `--batch_boundary\r\nContent-Type: application/http\r\n\r\nGET ${path}\r\n`),
     "--batch_boundary--",
   ].join("\r\n");
 }
@@ -314,9 +311,7 @@ describe("Google plugin integration", () => {
       scope: string;
     };
 
-    const tokenInfoRes = await app.request(
-      `${base}/oauth2/v1/tokeninfo?access_token=${tokenBody.access_token}`,
-    );
+    const tokenInfoRes = await app.request(`${base}/oauth2/v1/tokeninfo?access_token=${tokenBody.access_token}`);
     expect(tokenInfoRes.status).toBe(200);
 
     const tokenInfo = (await tokenInfoRes.json()) as {
@@ -337,9 +332,7 @@ describe("Google plugin integration", () => {
   });
 
   it("returns invalid_token for unknown access tokens", async () => {
-    const res = await app.request(
-      `${base}/oauth2/v1/tokeninfo?access_token=missing-token`,
-    );
+    const res = await app.request(`${base}/oauth2/v1/tokeninfo?access_token=missing-token`);
     expect(res.status).toBe(400);
 
     const body = (await res.json()) as {
@@ -442,10 +435,7 @@ describe("Google plugin integration", () => {
     });
 
     expect(batchRes.status).toBe(200);
-    const responseParts = parseBatchResponseBody(
-      batchRes.headers.get("Content-Type"),
-      await batchRes.text(),
-    );
+    const responseParts = parseBatchResponseBody(batchRes.headers.get("Content-Type"), await batchRes.text());
 
     expect(responseParts).toHaveLength(2);
     expect(responseParts[0]?.statusLine).toBe("HTTP/1.1 200 OK");
