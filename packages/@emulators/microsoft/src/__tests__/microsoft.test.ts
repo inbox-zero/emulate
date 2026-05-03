@@ -113,7 +113,7 @@ async function exchangeCode(
 async function getAccessToken(app: Hono): Promise<string> {
   const { code } = await getAuthCode(app);
   const tokenRes = await exchangeCode(app, code);
-  const tokenBody = await tokenRes.json() as Record<string, unknown>;
+  const tokenBody = (await tokenRes.json()) as Record<string, unknown>;
   return tokenBody.access_token as string;
 }
 
@@ -134,7 +134,7 @@ describe("Microsoft plugin integration", () => {
   it("GET /.well-known/openid-configuration returns Microsoft OIDC discovery document", async () => {
     const res = await app.request(`${base}/.well-known/openid-configuration`);
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.issuer).toContain("/v2.0");
     expect(body.authorization_endpoint).toBe(`${base}/oauth2/v2.0/authorize`);
     expect(body.token_endpoint).toBe(`${base}/oauth2/v2.0/token`);
@@ -157,7 +157,7 @@ describe("Microsoft plugin integration", () => {
     const tenantId = "my-tenant-id";
     const res = await app.request(`${base}/${tenantId}/v2.0/.well-known/openid-configuration`);
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.issuer).toBe(`${base}/${tenantId}/v2.0`);
   });
 
@@ -166,7 +166,7 @@ describe("Microsoft plugin integration", () => {
   it("GET /discovery/v2.0/keys returns JWKS with RSA public key", async () => {
     const res = await app.request(`${base}/discovery/v2.0/keys`);
     expect(res.status).toBe(200);
-    const body = await res.json() as { keys: Array<Record<string, unknown>> };
+    const body = (await res.json()) as { keys: Array<Record<string, unknown>> };
     expect(body.keys).toHaveLength(1);
     const key = body.keys[0];
     expect(key.kty).toBe("RSA");
@@ -228,7 +228,7 @@ describe("Microsoft plugin integration", () => {
 
     const tokenRes = await exchangeCode(app, code);
     expect(tokenRes.status).toBe(200);
-    const tokenBody = await tokenRes.json() as Record<string, unknown>;
+    const tokenBody = (await tokenRes.json()) as Record<string, unknown>;
     expect(tokenBody.access_token).toBeDefined();
     expect((tokenBody.access_token as string).startsWith("microsoft_")).toBe(true);
     expect(tokenBody.refresh_token).toBeDefined();
@@ -257,7 +257,7 @@ describe("Microsoft plugin integration", () => {
   it("exchanges refresh_token for new access_token with rotated refresh_token", async () => {
     const { code } = await getAuthCode(app);
     const tokenRes = await exchangeCode(app, code);
-    const tokenBody = await tokenRes.json() as Record<string, unknown>;
+    const tokenBody = (await tokenRes.json()) as Record<string, unknown>;
     const refreshToken = tokenBody.refresh_token as string;
 
     const refreshFormData = new URLSearchParams({
@@ -274,7 +274,7 @@ describe("Microsoft plugin integration", () => {
     });
 
     expect(refreshRes.status).toBe(200);
-    const refreshBody = await refreshRes.json() as Record<string, unknown>;
+    const refreshBody = (await refreshRes.json()) as Record<string, unknown>;
     expect(refreshBody.access_token).toBeDefined();
     expect((refreshBody.access_token as string).startsWith("microsoft_")).toBe(true);
     expect(refreshBody.id_token).toBeDefined();
@@ -297,7 +297,7 @@ describe("Microsoft plugin integration", () => {
     // Second exchange fails
     const res2 = await exchangeCode(app, code);
     expect(res2.status).toBe(400);
-    const body = await res2.json() as Record<string, unknown>;
+    const body = (await res2.json()) as Record<string, unknown>;
     expect(body.error).toBe("invalid_grant");
   });
 
@@ -325,7 +325,7 @@ describe("Microsoft plugin integration", () => {
     });
 
     expect(res.status).toBe(400);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("unsupported_grant_type");
   });
 
@@ -334,14 +334,14 @@ describe("Microsoft plugin integration", () => {
   it("GET /oidc/userinfo returns user info when authenticated", async () => {
     const { code } = await getAuthCode(app);
     const tokenRes = await exchangeCode(app, code);
-    const tokenBody = await tokenRes.json() as Record<string, unknown>;
+    const tokenBody = (await tokenRes.json()) as Record<string, unknown>;
     const accessToken = tokenBody.access_token as string;
 
     const res = await app.request(`${base}/oidc/userinfo`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.sub).toBeDefined();
     expect(body.email).toBe("testuser@example.com");
     expect(body.name).toBe("Test User");
@@ -353,14 +353,14 @@ describe("Microsoft plugin integration", () => {
   it("GET /v1.0/me returns Graph-style user profile when authenticated", async () => {
     const { code } = await getAuthCode(app);
     const tokenRes = await exchangeCode(app, code);
-    const tokenBody = await tokenRes.json() as Record<string, unknown>;
+    const tokenBody = (await tokenRes.json()) as Record<string, unknown>;
     const accessToken = tokenBody.access_token as string;
 
     const res = await app.request(`${base}/v1.0/me`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.displayName).toBe("Test User");
     expect(body.mail).toBe("testuser@example.com");
     expect(body.userPrincipalName).toBe("testuser@example.com");
@@ -372,14 +372,18 @@ describe("Microsoft plugin integration", () => {
 
   it("GET /oauth2/v2.0/logout redirects when post_logout_redirect_uri is registered", async () => {
     const redirectUri = "http://localhost:3000/callback";
-    const res = await app.request(`${base}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}`);
+    const res = await app.request(
+      `${base}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}`,
+    );
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe(redirectUri);
   });
 
   it("GET /oauth2/v2.0/logout rejects unregistered post_logout_redirect_uri", async () => {
     const redirectUri = "http://evil.example.com/phishing";
-    const res = await app.request(`${base}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}`);
+    const res = await app.request(
+      `${base}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}`,
+    );
     expect(res.status).toBe(400);
     const body = await res.text();
     expect(body).toBe("Invalid post_logout_redirect_uri");
@@ -414,7 +418,7 @@ describe("Microsoft plugin integration", () => {
     const { code } = await getAuthCode(app);
     const res = await exchangeCode(app, code, { client_secret: "wrong-secret" });
     expect(res.status).toBe(401);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("invalid_client");
   });
 
@@ -440,7 +444,7 @@ describe("Microsoft plugin integration", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.access_token).toBeDefined();
     expect((body.access_token as string).startsWith("microsoft_")).toBe(true);
   });
@@ -465,7 +469,7 @@ describe("Microsoft plugin integration", () => {
     });
 
     expect(res.status).toBe(401);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("invalid_client");
   });
 
@@ -486,7 +490,7 @@ describe("Microsoft plugin integration", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.access_token).toBeDefined();
     expect((body.access_token as string).startsWith("microsoft_")).toBe(true);
     expect(body.token_type).toBe("Bearer");
@@ -511,7 +515,7 @@ describe("Microsoft plugin integration", () => {
     });
 
     expect(res.status).toBe(401);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("invalid_client");
   });
 
@@ -532,7 +536,7 @@ describe("Microsoft plugin integration", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.access_token).toBeDefined();
   });
 
@@ -545,7 +549,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(listRes.status).toBe(200);
-    const listBody = await listRes.json() as { value: Array<Record<string, unknown>>; "@odata.nextLink"?: string };
+    const listBody = (await listRes.json()) as { value: Array<Record<string, unknown>>; "@odata.nextLink"?: string };
     expect(listBody.value.length).toBe(2);
     expect(listBody["@odata.nextLink"]).toBeTruthy();
     expect(listBody["@odata.nextLink"]).toMatch(/^\/v1\.0\/me\/messages\?/);
@@ -558,7 +562,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(replyRes.status).toBe(201);
-    const replyBody = await replyRes.json() as Record<string, unknown>;
+    const replyBody = (await replyRes.json()) as Record<string, unknown>;
     const draftId = String(replyBody.id);
     expect(replyBody.isDraft).toBe(true);
 
@@ -580,7 +584,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(sendRes.status).toBe(200);
-    const sendBody = await sendRes.json() as Record<string, unknown>;
+    const sendBody = (await sendRes.json()) as Record<string, unknown>;
     expect(sendBody.isDraft).toBe(false);
     expect(sendBody.parentFolderId).toBe("sentitems");
   });
@@ -609,7 +613,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(sentFolderRes.status).toBe(200);
-    const sentFolderBody = await sentFolderRes.json() as { value: Array<Record<string, unknown>> };
+    const sentFolderBody = (await sentFolderRes.json()) as { value: Array<Record<string, unknown>> };
     const directSend = sentFolderBody.value.find((message) => message.subject === "Direct send");
     expect(directSend).toBeDefined();
 
@@ -617,7 +621,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(inboxRes.status).toBe(200);
-    const inboxBody = await inboxRes.json() as { value: Array<Record<string, unknown>> };
+    const inboxBody = (await inboxRes.json()) as { value: Array<Record<string, unknown>> };
     const sourceMessageId = String(inboxBody.value[0]?.id);
     expect(sourceMessageId).toBeTruthy();
 
@@ -636,7 +640,7 @@ describe("Microsoft plugin integration", () => {
     const sentAfterReplyRes = await app.request(`${base}/v1.0/me/mailFolders/sentitems/messages?$top=20`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const sentAfterReplyBody = await sentAfterReplyRes.json() as { value: Array<Record<string, unknown>> };
+    const sentAfterReplyBody = (await sentAfterReplyRes.json()) as { value: Array<Record<string, unknown>> };
     const replyAllMessage = sentAfterReplyBody.value.find((message) => String(message.subject).startsWith("Re:"));
     expect(replyAllMessage).toBeDefined();
     expect(Array.isArray(replyAllMessage?.toRecipients)).toBe(true);
@@ -658,7 +662,7 @@ describe("Microsoft plugin integration", () => {
         toRecipients: [{ emailAddress: { address: "friend@example.com" } }],
       }),
     });
-    const draftBody = await createDraftRes.json() as Record<string, unknown>;
+    const draftBody = (await createDraftRes.json()) as Record<string, unknown>;
     const draftId = String(draftBody.id);
 
     const attachmentRes = await app.request(`${base}/v1.0/me/messages/${draftId}/attachments`, {
@@ -674,7 +678,7 @@ describe("Microsoft plugin integration", () => {
       }),
     });
     expect(attachmentRes.status).toBe(201);
-    const attachmentBody = await attachmentRes.json() as Record<string, unknown>;
+    const attachmentBody = (await attachmentRes.json()) as Record<string, unknown>;
     expect(attachmentBody.name).toBe("note.txt");
 
     const uploadSessionRes = await app.request(`${base}/v1.0/me/messages/${draftId}/attachments/createUploadSession`, {
@@ -693,7 +697,7 @@ describe("Microsoft plugin integration", () => {
       }),
     });
     expect(uploadSessionRes.status).toBe(200);
-    const uploadSessionBody = await uploadSessionRes.json() as Record<string, unknown>;
+    const uploadSessionBody = (await uploadSessionRes.json()) as Record<string, unknown>;
     const uploadUrl = String(uploadSessionBody.uploadUrl);
 
     const uploadChunkRes = await app.request(uploadUrl, {
@@ -707,7 +711,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(categoriesRes.status).toBe(200);
-    const categoriesBody = await categoriesRes.json() as { value: Array<Record<string, unknown>> };
+    const categoriesBody = (await categoriesRes.json()) as { value: Array<Record<string, unknown>> };
     expect(categoriesBody.value.length).toBeGreaterThan(0);
 
     const createRuleRes = await app.request(`${base}/v1.0/me/mailFolders/inbox/messageRules`, {
@@ -745,7 +749,7 @@ describe("Microsoft plugin integration", () => {
     const archiveMessage = await app.request(`${base}/v1.0/me/messages?$filter=parentFolderId eq 'inbox'&$top=1`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const archiveMessageBody = await archiveMessage.json() as { value: Array<Record<string, unknown>> };
+    const archiveMessageBody = (await archiveMessage.json()) as { value: Array<Record<string, unknown>> };
     const archiveMessageId = String(archiveMessageBody.value[0]?.id);
 
     const batchRes = await app.request(`${base}/v1.0/$batch`, {
@@ -767,7 +771,7 @@ describe("Microsoft plugin integration", () => {
       }),
     });
     expect(batchRes.status).toBe(200);
-    const batchBody = await batchRes.json() as { responses: Array<Record<string, unknown>> };
+    const batchBody = (await batchRes.json()) as { responses: Array<Record<string, unknown>> };
     expect(batchBody.responses[0]?.status).toBe(200);
   });
 
@@ -778,7 +782,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(calendarsRes.status).toBe(200);
-    const calendarsBody = await calendarsRes.json() as { value: Array<Record<string, unknown>> };
+    const calendarsBody = (await calendarsRes.json()) as { value: Array<Record<string, unknown>> };
     expect(calendarsBody.value.length).toBeGreaterThan(0);
 
     const calendarId = String(calendarsBody.value[0]?.id);
@@ -791,7 +795,7 @@ describe("Microsoft plugin integration", () => {
       },
     );
     expect(calendarViewRes.status).toBe(200);
-    const calendarViewBody = await calendarViewRes.json() as { value: Array<Record<string, unknown>> };
+    const calendarViewBody = (await calendarViewRes.json()) as { value: Array<Record<string, unknown>> };
     expect(calendarViewBody.value.length).toBeGreaterThan(0);
     expect(calendarViewBody.value[0]?.start).toBeDefined();
   });
@@ -802,7 +806,7 @@ describe("Microsoft plugin integration", () => {
     const calendarsRes = await app.request(`${base}/v1.0/me/calendars`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const calendarsBody = await calendarsRes.json() as { value: Array<Record<string, unknown>> };
+    const calendarsBody = (await calendarsRes.json()) as { value: Array<Record<string, unknown>> };
     const teamCalendar = calendarsBody.value.find((calendar) => calendar.isDefaultCalendar === false);
     expect(teamCalendar).toBeDefined();
     const calendarId = teamCalendar?.id;
@@ -823,7 +827,7 @@ describe("Microsoft plugin integration", () => {
       }),
     });
     expect(createRes.status).toBe(201);
-    const createdEvent = await createRes.json() as Record<string, unknown>;
+    const createdEvent = (await createRes.json()) as Record<string, unknown>;
     const eventId = String(createdEvent.id);
 
     const getRes = await app.request(`${base}/v1.0/me/calendars/${calendarId as string}/events/${eventId}`, {
@@ -843,7 +847,7 @@ describe("Microsoft plugin integration", () => {
       }),
     });
     expect(patchRes.status).toBe(200);
-    const patchedEvent = await patchRes.json() as Record<string, unknown>;
+    const patchedEvent = (await patchRes.json()) as Record<string, unknown>;
     expect(patchedEvent.subject).toBe("Roadmap review updated");
     expect((patchedEvent.location as Record<string, unknown>).displayName).toBe("Room 4");
 
@@ -851,7 +855,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(listRes.status).toBe(200);
-    const listBody = await listRes.json() as { value: Array<Record<string, unknown>> };
+    const listBody = (await listRes.json()) as { value: Array<Record<string, unknown>> };
     expect(listBody.value.some((event) => event.id === eventId)).toBe(true);
 
     const deleteRes = await app.request(`${base}/v1.0/me/calendars/${calendarId as string}/events/${eventId}`, {
@@ -873,7 +877,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(rootRes.status).toBe(200);
-    const rootBody = await rootRes.json() as { value: Array<Record<string, unknown>> };
+    const rootBody = (await rootRes.json()) as { value: Array<Record<string, unknown>> };
     expect(rootBody.value.length).toBeGreaterThan(0);
 
     const createFolderRes = await app.request(`${base}/v1.0/me/drive/root/children`, {
@@ -889,7 +893,7 @@ describe("Microsoft plugin integration", () => {
       }),
     });
     expect(createFolderRes.status).toBe(201);
-    const createFolderBody = await createFolderRes.json() as Record<string, unknown>;
+    const createFolderBody = (await createFolderRes.json()) as Record<string, unknown>;
     const folderId = String(createFolderBody.id);
 
     const uploadRes = await app.request(`${base}/v1.0/me/drive/items/${folderId}:/hello.txt:/content`, {
@@ -901,7 +905,7 @@ describe("Microsoft plugin integration", () => {
       body: Buffer.from("hello drive"),
     });
     expect(uploadRes.status).toBe(200);
-    const uploadBody = await uploadRes.json() as Record<string, unknown>;
+    const uploadBody = (await uploadRes.json()) as Record<string, unknown>;
     const fileId = String(uploadBody.id);
 
     const downloadRes = await app.request(`${base}/v1.0/me/drive/items/${fileId}/content`, {
@@ -933,7 +937,7 @@ describe("Microsoft plugin integration", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(rootRes.status).toBe(200);
-    const rootBody = await rootRes.json() as Record<string, unknown>;
+    const rootBody = (await rootRes.json()) as Record<string, unknown>;
     expect(rootBody.id).toBe("root");
 
     const folderRes = await app.request(`${base}/v1.0/me/drive/root/children`, {
@@ -948,7 +952,7 @@ describe("Microsoft plugin integration", () => {
       }),
     });
     expect(folderRes.status).toBe(201);
-    const folderBody = await folderRes.json() as Record<string, unknown>;
+    const folderBody = (await folderRes.json()) as Record<string, unknown>;
     const folderId = String(folderBody.id);
 
     const createSessionRes = await app.request(
@@ -965,7 +969,7 @@ describe("Microsoft plugin integration", () => {
       },
     );
     expect(createSessionRes.status).toBe(200);
-    const createSessionBody = await createSessionRes.json() as Record<string, unknown>;
+    const createSessionBody = (await createSessionRes.json()) as Record<string, unknown>;
     const uploadUrl = String(createSessionBody.uploadUrl);
 
     const uploadChunkRes = await app.request(uploadUrl, {
@@ -974,14 +978,14 @@ describe("Microsoft plugin integration", () => {
       body: Buffer.from("hello world"),
     });
     expect(uploadChunkRes.status).toBe(201);
-    const uploadedFile = await uploadChunkRes.json() as Record<string, unknown>;
+    const uploadedFile = (await uploadChunkRes.json()) as Record<string, unknown>;
     const fileId = String(uploadedFile.id);
 
     const getItemRes = await app.request(`${base}/v1.0/me/drive/items/${fileId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(getItemRes.status).toBe(200);
-    const getItemBody = await getItemRes.json() as Record<string, unknown>;
+    const getItemBody = (await getItemRes.json()) as Record<string, unknown>;
     expect(getItemBody.name).toBe("chunked.txt");
 
     const deleteRes = await app.request(`${base}/v1.0/me/drive/items/${fileId}`, {
@@ -1035,5 +1039,94 @@ describe("Microsoft plugin integration", () => {
     const client = ms.oauthClients.findOneBy("client_id", "my-app");
     expect(client).toBeDefined();
     expect(client!.name).toBe("My App");
+  });
+
+  // --- v1 OAuth token endpoint (legacy /{tenant}/oauth2/token) ---
+
+  it("POST /:tenant/oauth2/token issues token with client_credentials and resource param", async () => {
+    const formData = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: "test-client",
+      client_secret: "test-secret",
+      resource: "https://graph.microsoft.com",
+    });
+
+    const res = await app.request(`${base}/my-tenant/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData.toString(),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.access_token).toBeDefined();
+    expect((body.access_token as string).startsWith("microsoft_")).toBe(true);
+    expect(body.token_type).toBe("Bearer");
+    expect(body.expires_in).toBe(3600);
+    // resource=https://graph.microsoft.com should become scope=https://graph.microsoft.com/.default
+    expect(body.scope).toBe("https://graph.microsoft.com/.default");
+  });
+
+  it("POST /:tenant/oauth2/token preserves explicit scope over resource param", async () => {
+    const formData = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: "test-client",
+      client_secret: "test-secret",
+      scope: "https://graph.microsoft.com/.default",
+      resource: "https://something-else.example.com",
+    });
+
+    const res = await app.request(`${base}/my-tenant/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData.toString(),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.scope).toBe("https://graph.microsoft.com/.default");
+  });
+
+  it("POST /:tenant/oauth2/token rejects wrong client_secret", async () => {
+    const formData = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: "test-client",
+      client_secret: "wrong-secret",
+      resource: "https://graph.microsoft.com",
+    });
+
+    const res = await app.request(`${base}/my-tenant/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData.toString(),
+    });
+
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe("invalid_client");
+  });
+
+  // --- Graph /v1.0/users/:id endpoint ---
+
+  it("GET /v1.0/users/:id returns user profile by oid", async () => {
+    const ms = getMicrosoftStore(store);
+    const user = ms.users.findOneBy("email", "testuser@example.com");
+    expect(user).toBeDefined();
+
+    const res = await app.request(`${base}/v1.0/users/${user!.oid}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.id).toBe(user!.oid);
+    expect(body.displayName).toBe("Test User");
+    expect(body.mail).toBe("testuser@example.com");
+    expect(body.userPrincipalName).toBe("testuser@example.com");
+    expect(body["@odata.context"]).toContain("$metadata#users");
+  });
+
+  it("GET /v1.0/users/:id returns 404 for unknown user id", async () => {
+    const res = await app.request(`${base}/v1.0/users/00000000-0000-0000-0000-000000000000`);
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: Record<string, unknown> };
+    expect(body.error.code).toBe("Request_ResourceNotFound");
   });
 });

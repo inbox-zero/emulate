@@ -54,18 +54,9 @@ export function getMicrosoftStore(store: Store): MicrosoftStore {
       "user_email",
       "display_name",
     ]),
-    messageRules: store.collection<MicrosoftMessageRule>("microsoft.message_rules", [
-      "microsoft_id",
-      "user_email",
-    ]),
-    subscriptions: store.collection<MicrosoftSubscription>("microsoft.subscriptions", [
-      "microsoft_id",
-      "user_email",
-    ]),
-    calendars: store.collection<MicrosoftCalendar>("microsoft.calendars", [
-      "microsoft_id",
-      "user_email",
-    ]),
+    messageRules: store.collection<MicrosoftMessageRule>("microsoft.message_rules", ["microsoft_id", "user_email"]),
+    subscriptions: store.collection<MicrosoftSubscription>("microsoft.subscriptions", ["microsoft_id", "user_email"]),
+    calendars: store.collection<MicrosoftCalendar>("microsoft.calendars", ["microsoft_id", "user_email"]),
     calendarEvents: store.collection<MicrosoftCalendarEvent>("microsoft.calendar_events", [
       "microsoft_id",
       "calendar_microsoft_id",

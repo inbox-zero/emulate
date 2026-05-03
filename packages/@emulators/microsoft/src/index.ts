@@ -19,7 +19,6 @@ import { oauthRoutes } from "./routes/oauth.js";
 export { getMicrosoftStore, type MicrosoftStore } from "./store.js";
 export * from "./entities.js";
 
-
 export interface MicrosoftSeedConfig {
   port?: number;
   users?: Array<{
@@ -207,7 +206,8 @@ export function seedFromConfig(store: Store, baseUrl: string, config: MicrosoftS
         is_read: message.is_read,
         importance: message.importance,
         categories: message.categories,
-        parent_folder_id: message.parent_folder_id ?? (message.is_draft ? folders.drafts.microsoft_id : folders.inbox.microsoft_id),
+        parent_folder_id:
+          message.parent_folder_id ?? (message.is_draft ? folders.drafts.microsoft_id : folders.inbox.microsoft_id),
         web_link_base: baseUrl,
       });
     }
