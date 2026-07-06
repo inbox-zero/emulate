@@ -389,6 +389,11 @@ function compilePath(pattern: string): CompiledPath {
   let source = "^";
   for (let i = 0; i < pattern.length; i++) {
     const char = pattern[i];
+    if (char === "*" && i === pattern.length - 1) {
+      // Trailing wildcard segment (e.g. "/items/*") matches any remaining path suffix.
+      source += ".*";
+      continue;
+    }
     if (char !== ":") {
       source += escapeRegex(char);
       continue;
