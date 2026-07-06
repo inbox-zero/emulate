@@ -1,4 +1,4 @@
-import type { Context } from "hono";
+import type { Context } from "@emulators/core";
 
 export async function parseJsonBody(c: Context): Promise<Record<string, unknown>> {
   const contentType = c.req.header("Content-Type") ?? "";

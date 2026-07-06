@@ -6,10 +6,12 @@ packages/
   @emulators/
     core/           # HTTP server, in-memory store, plugin interface, middleware
     adapter-next/   # Next.js App Router integration
+    adapter-nuxt/   # Nuxt server route integration
     vercel/         # Vercel API service
     github/         # GitHub API service
     google/         # Google OAuth 2.0 / OIDC + Gmail, Calendar, Drive
     slack/          # Slack Web API, OAuth v2, incoming webhooks
+    linear/         # Linear GraphQL API, OAuth, webhooks
     apple/          # Apple Sign In / OIDC
     microsoft/      # Microsoft Entra ID OAuth 2.0 / OIDC + Graph /me
     aws/            # AWS S3, SQS, IAM, STS
@@ -17,20 +19,21 @@ packages/
     mongoatlas/     # MongoDB Atlas Admin API + Data API
     resend/         # Resend email API
     stripe/         # Stripe billing and payments API
+    clerk/          # Clerk Backend API and OAuth
 apps/
   web/              # Documentation site (Next.js)
 ```
 
 ## Core
 
-The core package provides a generic `Store` with typed `Collection<T>` instances supporting CRUD, indexing, filtering, and pagination. Each service plugin registers its routes on the shared Hono app and uses the store for state.
+The core package provides a generic `Store` with typed `Collection<T>` instances supporting CRUD, indexing, filtering, and pagination. Each service plugin registers its routes with the shared internal app and uses the store for state.
 
 ## Plugin System
 
 Each service is a plugin that:
 
 1. Defines its entity types and store collections
-2. Registers HTTP routes on the shared Hono app
+2. Registers HTTP routes with the shared internal app
 3. Provides a seed function to populate initial state from config
 4. Uses shared middleware for auth, error handling, and pagination
 

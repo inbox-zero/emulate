@@ -17,6 +17,7 @@ const sections: NavSection[] = [
       { href: "/docs/programmatic-api", label: "Programmatic API" },
       { href: "/docs/configuration", label: "Configuration" },
       { href: "/docs/nextjs", label: "Next.js Integration" },
+      { href: "/docs/nuxt", label: "Nuxt Integration" },
     ],
   },
   {
@@ -26,6 +27,7 @@ const sections: NavSection[] = [
       { href: "/docs/github", label: "GitHub" },
       { href: "/docs/google", label: "Google" },
       { href: "/docs/slack", label: "Slack" },
+      { href: "/docs/linear", label: "Linear" },
       { href: "/docs/apple", label: "Apple" },
       { href: "/docs/microsoft", label: "Microsoft Entra ID" },
       { href: "/docs/aws", label: "AWS" },

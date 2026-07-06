@@ -27,6 +27,8 @@ const SERVICE_NAME_LIST = [
   "stripe",
   "mongoatlas",
   "clerk",
+  "linear",
+  "twilio",
 ] as const;
 export type ServiceName = (typeof SERVICE_NAME_LIST)[number];
 export const SERVICE_NAMES: readonly ServiceName[] = SERVICE_NAME_LIST;
@@ -34,7 +36,7 @@ export const SERVICE_NAMES: readonly ServiceName[] = SERVICE_NAME_LIST;
 export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
   vercel: {
     label: "Vercel REST API emulator",
-    endpoints: "projects, deployments, domains, env vars, users, teams, file uploads, protection bypass",
+    endpoints: "projects, deployments, domains, env vars, users, teams, file uploads, protection bypass, blob storage",
     async load() {
       const mod = await import("@emulators/vercel");
       return { plugin: mod.vercelPlugin, seedFromConfig: mod.seedFromConfig };
@@ -215,18 +217,35 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
 
   slack: {
     label: "Slack API emulator",
-    endpoints: "auth, chat, conversations, users, reactions, team, OAuth, incoming webhooks",
+    endpoints:
+      "auth, chat, conversations, users, profiles, presence, files, pins, bookmarks, views, reactions, team, OAuth, incoming webhooks, inspector",
     async load() {
       const mod = await import("@emulators/slack");
       return { plugin: mod.slackPlugin, seedFromConfig: mod.seedFromConfig };
     },
     defaultFallback() {
-      return { login: "U000000001", id: 1, scopes: ["chat:write", "channels:read", "users:read", "reactions:write"] };
+      return {
+        login: "U000000001",
+        id: 1,
+        scopes: [],
+      };
     },
     initConfig: {
       slack: {
         team: { name: "My Workspace", domain: "my-workspace" },
-        users: [{ name: "developer", real_name: "Developer", email: "dev@example.com" }],
+        users: [
+          {
+            name: "developer",
+            real_name: "Developer",
+            email: "dev@example.com",
+            profile: {
+              title: "Local Developer",
+              status_text: "Testing locally",
+              status_emoji: ":computer:",
+            },
+            presence: "active",
+          },
+        ],
         channels: [
           { name: "general", topic: "General discussion" },
           { name: "random", topic: "Random stuff" },
@@ -236,10 +255,45 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
           {
             client_id: "12345.67890",
             client_secret: "example_client_secret",
+            app_id: "A000000001",
             name: "My Slack App",
             redirect_uris: ["http://localhost:3000/api/auth/callback/slack"],
+            scopes: [
+              "chat:write",
+              "channels:read",
+              "channels:history",
+              "channels:join",
+              "channels:manage",
+              "channels:write",
+              "groups:read",
+              "groups:history",
+              "groups:write",
+              "im:read",
+              "im:history",
+              "im:write",
+              "mpim:read",
+              "mpim:history",
+              "mpim:write",
+              "users:read",
+              "users:read.email",
+              "users.profile:read",
+              "users.profile:write",
+              "users:write",
+              "files:read",
+              "files:write",
+              "pins:read",
+              "pins:write",
+              "bookmarks:read",
+              "bookmarks:write",
+              "reactions:read",
+              "reactions:write",
+              "team:read",
+            ],
+            user_scopes: ["users:read", "users.profile:read"],
+            bot_name: "my-bot",
           },
         ],
+        strict_scopes: false,
       },
     },
   },
@@ -272,8 +326,7 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
 
   microsoft: {
     label: "Microsoft Entra ID OAuth 2.0 / OpenID Connect emulator",
-    endpoints:
-      "OAuth authorize, token exchange, userinfo, OIDC discovery, Graph /me, mail, calendar, drive, logout, token revocation",
+    endpoints: "OAuth authorize, token exchange, userinfo, OIDC discovery, Graph /me, logout, token revocation",
     async load() {
       const mod = await import("@emulators/microsoft");
       return { plugin: mod.microsoftPlugin, seedFromConfig: mod.seedFromConfig };
@@ -290,27 +343,9 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
             client_id: "example-client-id",
             client_secret: "example-client-secret",
             name: "My Microsoft App",
-            redirect_uris: [
-              "http://localhost:3000/api/auth/callback/microsoft-entra-id",
-              "http://localhost:3000/api/microsoft/linking/callback",
-              "http://localhost:3000/api/microsoft/calendar/callback",
-              "http://localhost:3000/api/microsoft/drive/callback",
-            ],
+            redirect_uris: ["http://localhost:3000/api/auth/callback/microsoft-entra-id"],
           },
         ],
-        categories: [{ display_name: "Follow Up", color: "preset4" }],
-        calendars: [{ id: "primary", name: "Calendar", is_default_calendar: true }],
-        calendar_events: [
-          {
-            id: "evt_planning",
-            calendar_id: "primary",
-            subject: "Inbox Zero planning",
-            start_date_time: "2025-01-10T09:00:00.000Z",
-            end_date_time: "2025-01-10T09:30:00.000Z",
-            location_display_name: "Teams",
-          },
-        ],
-        drive_items: [{ id: "drv_invoices", name: "Invoices", is_folder: true }],
       },
     },
   },
@@ -466,6 +501,130 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
             redirect_uris: ["http://localhost:3000/api/auth/callback/clerk"],
           },
         ],
+      },
+    },
+  },
+  linear: {
+    label: "Linear GraphQL API emulator",
+    endpoints:
+      "GraphQL, OAuth, issues, teams, users, workflow states, comments, labels, projects, cycles, webhooks, agents, inspector",
+    async load() {
+      const mod = await import("@emulators/linear");
+      return { plugin: mod.linearPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback(cfg) {
+      const firstEmail = (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "admin@linear.local";
+      return { login: firstEmail, id: 1, scopes: [] };
+    },
+    initConfig: {
+      linear: {
+        organization: { name: "Acme", url_key: "acme" },
+        users: [
+          { email: "admin@example.com", name: "Admin User", admin: true },
+          { email: "dev@example.com", name: "Developer" },
+        ],
+        teams: [
+          {
+            key: "ENG",
+            name: "Engineering",
+            states: [
+              { name: "Backlog", type: "backlog" },
+              { name: "Todo", type: "unstarted" },
+              { name: "In Progress", type: "started" },
+              { name: "Done", type: "completed" },
+            ],
+          },
+        ],
+        labels: [
+          { name: "Bug", color: "#d92d20", team: "ENG" },
+          { name: "Feature", color: "#2563eb", team: "ENG" },
+        ],
+        issues: [
+          {
+            team: "ENG",
+            title: "Fix local checkout test",
+            description: "Reproduce and fix the checkout failure.",
+            state: "Todo",
+            assignee: "dev@example.com",
+            labels: ["Bug"],
+          },
+        ],
+        oauth_apps: [
+          {
+            client_id: "lin_example_client_id",
+            client_secret: "example_client_secret",
+            name: "My Linear App",
+            redirect_uris: ["http://localhost:3000/api/auth/callback/linear"],
+            scopes: ["read", "write", "issues:create", "comments:create"],
+            actor: "user",
+          },
+        ],
+        tokens: [
+          {
+            token: "lin_test_admin",
+            user: "admin@example.com",
+            scopes: ["read", "write", "issues:create", "comments:create", "admin"],
+          },
+        ],
+        strict_scopes: false,
+      },
+    },
+  },
+
+  twilio: {
+    label: "Twilio API emulator",
+    endpoints:
+      "accounts, API keys, phone numbers, Programmable Messaging, Messaging Services, Verify, Voice, webhooks, simulator, inspector",
+    async load() {
+      const mod = await import("@emulators/twilio");
+      return { plugin: mod.twilioPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback(cfg) {
+      const account = cfg?.account as { sid?: string } | undefined;
+      return {
+        login: account?.sid ?? "AC00000000000000000000000000000000",
+        id: 1,
+        scopes: [],
+      };
+    },
+    initConfig: {
+      twilio: {
+        account: {
+          sid: "AC00000000000000000000000000000000",
+          auth_token: "twilio_test_auth_token",
+          friendly_name: "Local Twilio Account",
+        },
+        api_keys: [
+          {
+            sid: "SK00000000000000000000000000000000",
+            secret: "twilio_test_api_secret",
+            friendly_name: "Local API Key",
+          },
+        ],
+        phone_numbers: [
+          {
+            phone_number: "+15551234567",
+            friendly_name: "Local SMS and Voice Number",
+            sms_url: "http://localhost:3000/api/twilio/sms",
+            voice_url: "http://localhost:3000/api/twilio/voice",
+          },
+        ],
+        messaging_services: [
+          {
+            friendly_name: "Local Messaging Service",
+            phone_numbers: ["+15551234567"],
+          },
+        ],
+        verify_services: [
+          {
+            friendly_name: "Local Verify Service",
+            code: "123456",
+            default_channel: "sms",
+          },
+        ],
+        conversations: {
+          services: [{ friendly_name: "Local Conversations" }],
+        },
       },
     },
   },

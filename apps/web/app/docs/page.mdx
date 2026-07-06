@@ -1,6 +1,6 @@
 # Getting Started
 
-Local drop-in replacement for Vercel, GitHub, Google, Slack, Apple, Microsoft, AWS, Okta, MongoDB Atlas, Resend, and Stripe APIs. Built for CI and no-network sandboxes. Fully stateful, production-fidelity API emulation. Not mocks.
+Local drop-in replacement for Vercel, GitHub, Google, Slack, Apple, Microsoft, Okta, AWS, Resend, Stripe, MongoDB Atlas, Clerk, and Linear APIs. Built for CI and no-network sandboxes. Fully stateful, production-fidelity API emulation. Not mocks.
 
 ## Quick Start
 
@@ -16,11 +16,13 @@ All services start with sensible defaults. No config file needed:
 - **Slack** on `http://localhost:4003`
 - **Apple** on `http://localhost:4004`
 - **Microsoft** on `http://localhost:4005`
-- **AWS** on `http://localhost:4006`
-- **Okta** on `http://localhost:4007`
-- **MongoDB Atlas** on `http://localhost:4008`
-- **Resend** on `http://localhost:4009`
-- **Stripe** on `http://localhost:4010`
+- **Okta** on `http://localhost:4006`
+- **AWS** on `http://localhost:4007`
+- **Resend** on `http://localhost:4008`
+- **Stripe** on `http://localhost:4009`
+- **MongoDB Atlas** on `http://localhost:4010`
+- **Clerk** on `http://localhost:4011`
+- **Linear** on `http://localhost:4012`
 
 ## CLI
 
@@ -82,6 +84,6 @@ The port can also be set via `EMULATE_PORT` or `PORT` environment variables.
 
 You can also use emulate as a library in your tests. See the [Programmatic API](/docs/programmatic-api) page for `createEmulator`, Vitest/Jest setup, and instance methods.
 
-## Next.js Integration
+## Framework Integration
 
-Embed emulators directly in your Next.js app so they run on the same origin. See the [Next.js Integration](/docs/nextjs) page for setup instructions.
+Embed emulators directly in your Next.js or Nuxt app so they run on the same origin. See the [Next.js Integration](/docs/nextjs) and [Nuxt Integration](/docs/nuxt) pages for setup instructions.

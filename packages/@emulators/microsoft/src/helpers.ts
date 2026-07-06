@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "crypto";
-import type { Context } from "hono";
+import type { Context } from "@emulators/core";
 import type {
   MicrosoftCalendar,
   MicrosoftCalendarEvent,

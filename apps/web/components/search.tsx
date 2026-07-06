@@ -22,52 +22,45 @@ export function Search() {
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const resetSearch = useCallback(() => {
-    setQuery("");
-    setResults([]);
-    setLoading(false);
-    setActiveIndex(0);
-  }, []);
-
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      setOpen(nextOpen);
-      if (!nextOpen) resetSearch();
-    },
-    [resetSearch],
-  );
-
   const navigate = useCallback(
     (href: string) => {
-      handleOpenChange(false);
+      setOpen(false);
+      setQuery("");
+      setResults([]);
       router.push(href);
     },
-    [handleOpenChange, router],
+    [router],
   );
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        handleOpenChange(!open);
+        setOpen((prev) => !prev);
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [handleOpenChange, open]);
+  }, []);
 
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      setQuery("");
+      setResults([]);
     }
   }, [open]);
 
   useEffect(() => {
     const q = query.trim();
     if (!q) {
+      setResults([]);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -80,7 +73,6 @@ export function Search() {
         if (res.ok) {
           const data = await res.json();
           setResults(data.results);
-          setActiveIndex(0);
         }
       } catch {
         // aborted or network error
@@ -96,6 +88,10 @@ export function Search() {
       controller.abort();
     };
   }, [query]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [results]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
@@ -117,20 +113,10 @@ export function Search() {
 
   const hasQuery = query.trim().length > 0;
 
-  function handleQueryChange(value: string) {
-    setQuery(value);
-    if (!value.trim()) {
-      resetSearch();
-    } else {
-      setLoading(true);
-      setActiveIndex(0);
-    }
-  }
-
   return (
     <>
       <button
-        onClick={() => handleOpenChange(true)}
+        onClick={() => setOpen(true)}
         className="hidden sm:flex items-center gap-2 rounded-md border border-border/50 bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/25 transition-colors"
       >
         <svg
@@ -154,7 +140,7 @@ export function Search() {
       </button>
 
       <button
-        onClick={() => handleOpenChange(true)}
+        onClick={() => setOpen(true)}
         className="sm:hidden flex items-center text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Search docs"
       >
@@ -174,7 +160,7 @@ export function Search() {
         </svg>
       </button>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent showCloseButton={false} className="gap-0 p-0 sm:max-w-lg">
           <DialogTitle className="sr-only">Search documentation</DialogTitle>
           <div className="flex items-center gap-2 border-b border-border/50 px-3">
@@ -196,13 +182,13 @@ export function Search() {
             <input
               ref={inputRef}
               value={query}
-              onChange={(e) => handleQueryChange(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search docs..."
               className="flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
             />
             {query && (
-              <button onClick={resetSearch} className="text-muted-foreground hover:text-foreground">
+              <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="14"

@@ -1,6 +1,6 @@
 {
   "name": "@inbox-zero/emulate",
-  "version": "0.5.0",
+  "version": "0.9.0",
   "description": "Local drop-in replacement services for CI and no-network sandboxes",
   "license": "Apache-2.0",
   "type": "module",
@@ -24,6 +24,9 @@
   "bugs": {
     "url": "https://github.com/inbox-zero/emulate/issues"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "emulator",
     "mock",
@@ -39,9 +42,6 @@
   "files": [
     "dist"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "bin": {
     "emulate": "./dist/index.js"
   },
@@ -55,26 +55,27 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.14",
-    "commander": "^14.0.3",
+    "commander": "^14",
     "picocolors": "^1.1.1",
-    "yaml": "^2.8.4"
+    "yaml": "^2"
   },
   "devDependencies": {
-    "@emulators/apple": "workspace:*",
-    "@emulators/aws": "workspace:*",
-    "@emulators/clerk": "workspace:*",
     "@emulators/core": "workspace:*",
     "@emulators/github": "workspace:*",
-    "@emulators/google": "workspace:*",
+    "@emulators/apple": "workspace:*",
     "@emulators/microsoft": "workspace:*",
-    "@emulators/mongoatlas": "workspace:*",
     "@emulators/okta": "workspace:*",
-    "@emulators/resend": "workspace:*",
+    "@emulators/aws": "workspace:*",
+    "@emulators/google": "workspace:*",
+    "@emulators/mongoatlas": "workspace:*",
     "@emulators/slack": "workspace:*",
-    "@emulators/stripe": "workspace:*",
     "@emulators/vercel": "workspace:*",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "@emulators/resend": "workspace:*",
+    "@emulators/stripe": "workspace:*",
+    "@emulators/clerk": "workspace:*",
+    "@emulators/linear": "workspace:*",
+    "@emulators/twilio": "workspace:*",
+    "tsup": "^8",
+    "typescript": "^5.7"
   }
 }

@@ -1,6 +1,6 @@
 ---
 name: vercel
-description: Emulated Vercel REST API for local development and testing. Use when the user needs to interact with Vercel API endpoints locally, test Vercel integrations, emulate projects/deployments/domains, set up Vercel OAuth flows, manage environment variables, create API keys, configure protection bypass, or test without hitting the real Vercel API. Triggers include "Vercel API", "emulate Vercel", "mock Vercel", "test Vercel OAuth", "Vercel integration", "local Vercel", or any task requiring a local Vercel API.
+description: Emulated Vercel REST API for local development and testing. Use when the user needs to interact with Vercel API endpoints locally, test Vercel integrations, emulate projects/deployments/domains, set up Vercel OAuth flows, manage environment variables, create API keys, configure protection bypass, emulate Vercel Blob storage, or test without hitting the real Vercel API. Triggers include "Vercel API", "emulate Vercel", "mock Vercel", "test Vercel OAuth", "Vercel integration", "Vercel Blob", "local Vercel", or any task requiring a local Vercel API.
 allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(emulate:*), Bash(curl:*)
 ---
 
@@ -342,6 +342,58 @@ curl -X DELETE http://localhost:4000/v9/projects/my-app/env/env_abc123 \
 ```
 
 Env var types: `system`, `encrypted`, `plain`, `secret`, `sensitive`.
+
+### Blob
+
+Implements the Vercel Blob API used by the `@vercel/blob` SDK (`put`, `head`, `list`, `del`). Point the SDK at the emulator with two environment variables:
+
+```bash
+VERCEL_BLOB_API_URL=http://localhost:4000/api/blob
+BLOB_READ_WRITE_TOKEN=vercel_blob_rw_mystore_secret
+```
+
+Any token of the form `vercel_blob_rw_<storeId>_<secret>` is accepted; the store id is parsed from the token.
+
+```typescript
+import { put, head, list, del } from '@vercel/blob'
+
+const blob = await put('avatars/user.png', data, { access: 'public' })
+// blob.url serves the bytes from the emulator
+await head(blob.url)
+await list({ prefix: 'avatars/' })
+await del(blob.url)
+```
+
+Direct HTTP:
+
+```bash
+BLOB_TOKEN="vercel_blob_rw_mystore_secret"
+
+# Upload (honors x-add-random-suffix, x-allow-overwrite, x-content-type,
+#   x-cache-control-max-age, x-if-match headers)
+curl -X PUT "http://localhost:4000/api/blob?pathname=docs/readme.txt" \
+  -H "Authorization: Bearer $BLOB_TOKEN" \
+  --data-binary @readme.txt
+
+# Metadata (head)
+curl "http://localhost:4000/api/blob?url=docs/readme.txt" \
+  -H "Authorization: Bearer $BLOB_TOKEN"
+
+# List (prefix, limit, cursor, mode=folded)
+curl "http://localhost:4000/api/blob?prefix=docs/" \
+  -H "Authorization: Bearer $BLOB_TOKEN"
+
+# Delete
+curl -X POST http://localhost:4000/api/blob/delete \
+  -H "Authorization: Bearer $BLOB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"urls": ["docs/readme.txt"]}'
+
+# Serve content (public, no auth; ?download=1 forces attachment)
+curl http://localhost:4000/blob/mystore/docs/readme.txt
+```
+
+Multipart uploads and client (browser) uploads are not supported yet.
 
 ### API Keys
 

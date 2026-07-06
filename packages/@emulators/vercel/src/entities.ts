@@ -236,6 +236,18 @@ export interface VercelApiKey extends Entity {
   tokenString: string;
 }
 
+export interface VercelBlob extends Entity {
+  pathname: string;
+  storeId: string;
+  contentType: string;
+  contentDisposition: string;
+  cacheControl: string;
+  size: number;
+  etag: string;
+  uploadedAt: string;
+  dataBase64: string;
+}
+
 export interface VercelIntegration extends Entity {
   client_id: string;
   client_secret: string;

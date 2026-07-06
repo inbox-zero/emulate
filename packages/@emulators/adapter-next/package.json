@@ -1,6 +1,6 @@
 {
   "name": "@emulators/adapter-next",
-  "version": "0.5.0",
+  "version": "0.9.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -38,7 +38,7 @@
     "@emulators/core": "workspace:*"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "tsup": "^8",
+    "typescript": "^5.7"
   }
 }

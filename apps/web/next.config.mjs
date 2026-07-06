@@ -10,6 +10,7 @@ const oldDocsSlugs = [
   "github",
   "google",
   "slack",
+  "linear",
   "apple",
   "microsoft",
   "aws",

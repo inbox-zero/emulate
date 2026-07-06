@@ -216,6 +216,33 @@ slack:
       name: My Slack App
       redirect_uris:
         - http://localhost:3000/api/auth/callback/slack
+      scopes:
+        - chat:write
+        - channels:read
+        - users.profile:read
+        - users.profile:write
+        - users:write
+        - files:read
+        - files:write
+        - pins:read
+        - pins:write
+        - bookmarks:read
+        - bookmarks:write
+  tokens:
+    - token: xoxb-local-test
+      user: developer
+      scopes:
+        - chat:write
+        - channels:read
+        - users.profile:read
+        - users.profile:write
+        - users:write
+        - files:read
+        - files:write
+        - pins:read
+        - pins:write
+        - bookmarks:read
+        - bookmarks:write
   incoming_webhooks:
     - channel: general
       label: CI Notifications

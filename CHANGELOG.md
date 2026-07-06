@@ -1,8 +1,83 @@
 # Changelog
 
+<!-- release:start -->
+## 0.9.0
+
+### New Features
+
+- **Nuxt emulator adapter** — new `@emulators/adapter-nuxt` package for embedding emulators in Nuxt apps, with Nuxt server route handling, persistence, response rewriting, and Nitro tracing support (#188)
+- **Nuxt embedded example** — added `examples/nuxt-embedded` demonstrating same-origin OAuth flows (GitHub + Google), a catch-all emulate server route, and cookie-based sessions (#188)
+
+### Improvements
+
+- **Nuxt docs and agent guidance** — documented Nuxt setup across the README, docs site, and agent skills (#188)
+
+### Contributors
+
+- @ctate
+
+<!-- release:end -->
+
+## 0.8.0
+
+### New Features
+
+- **Twilio emulator** — local Twilio API emulation with accounts, phone numbers, messages, calls, conversations, messaging services, Verify flows, simulator endpoints, SDK conformance tests, and inspector support (#185)
+- **Twilio SMS verification example** — working Next.js example for SMS verification with the Twilio emulator and local session handling (#186)
+
+### Improvements
+
+- **Twilio docs and agent guidance** — added README, docs site, and skill coverage for local Twilio development (#185, #186)
+
+### Contributors
+
+- @ctate
+
+## 0.7.0
+
+### New Features
+
+- **Linear emulator** — stateful Linear GraphQL API emulation with seeded organizations, users, teams, workflow states, issues, comments, labels, projects, cycles, OAuth apps, tokens, webhooks, agent sessions, and local inspector support (#180)
+
+### Improvements
+
+- **Linear docs and agent guidance** — added README, docs site, programmatic API, and skill coverage for Linear API, OAuth, and webhook testing (#180)
+
+### Contributors
+
+- @ctate
+
+## 0.6.1
+
+### New Features
+
+- **Vercel Blob emulator** — local emulation for Vercel Blob store operations, including uploads, downloads, listings, deletes, copy support, and inspector visibility (#175)
+
+### Improvements
+
+- **Vercel Blob examples** — added and hardened an example app that exercises upload sharing URL handling
+
+### Contributors
+
+- @ctate
+
+## 0.6.0
+
+### New Features
+
+- **Expanded Slack emulator support** — stateful Slack writes for rich chat messages, updates, deletes, permalinks, ephemeral and scheduled messages, conversations and DMs, OAuth installs and scopes, user profiles and presence, modern file uploads, pins and bookmarks, App Home views, modals, inspector tabs, event delivery visibility, docs, and coverage matrix (#152-#164)
+
+### Improvements
+
+- **Slack SDK coverage** — added Slack WebClient conformance tests and route coverage for the supported Slack Web API surface (#152-#164)
+- **Slack docs** — audited README, package docs, web docs, skill guidance, CLI seed output, strict scope notes, and unsupported Slack families against the implemented surface (#164)
+
+### Contributors
+
+- @ctate
+
 ## 0.5.0
 
-<!-- release:start -->
 ### New Features
 
 - **Clerk emulator** — local emulation of Clerk authentication and session management (#38)
@@ -29,7 +104,6 @@
 - @jlucaso1
 - @Railly
 - @tmm
-<!-- release:end -->
 
 ## 0.4.1
 

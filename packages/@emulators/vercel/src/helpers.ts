@@ -1,5 +1,5 @@
-import { randomBytes } from "crypto";
-import type { Context } from "hono";
+import { createHash, randomBytes } from "crypto";
+import type { Context } from "@emulators/core";
 import type {
   VercelUser,
   VercelTeam,
@@ -15,6 +15,17 @@ import type { VercelStore } from "./store.js";
 export function generateUid(prefix = ""): string {
   const id = randomBytes(12).toString("base64url").slice(0, 20);
   return prefix ? `${prefix}_${id}` : id;
+}
+
+/**
+ * Deterministic uid for seeded entities. Seeded identities must be stable
+ * across emulator restarts: downstream apps key accounts on the OIDC sub,
+ * and a regenerated uid for the same seeded user creates a duplicate
+ * account in the app after every restart.
+ */
+export function stableUid(prefix: string, seedKey: string): string {
+  const id = createHash("sha256").update(seedKey).digest("base64url").slice(0, 20);
+  return `${prefix}_${id}`;
 }
 
 export function generateSecret(): string {

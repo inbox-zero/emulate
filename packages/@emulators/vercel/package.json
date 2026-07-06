@@ -1,6 +1,6 @@
 {
   "name": "@emulators/vercel",
-  "version": "0.5.0",
+  "version": "0.9.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -35,12 +35,12 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@emulators/core": "workspace:*",
-    "hono": "^4.12.16"
+    "@emulators/core": "workspace:*"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.5"
+    "@vercel/blob": "^2.4.0",
+    "tsup": "^8",
+    "typescript": "^5.7",
+    "vitest": "^4.1.0"
   }
 }

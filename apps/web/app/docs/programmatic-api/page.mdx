@@ -7,7 +7,7 @@ Use emulators as libraries in your tests and scripts. There are two approaches: 
 The `emulate` package provides a `createEmulator` helper that starts any service by name.
 
 ```bash
-npm install @inbox-zero/emulate
+npm install emulate
 ```
 
 ```typescript
@@ -59,7 +59,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
     <tr>
       <td><code>service</code></td>
       <td><em>(required)</em></td>
-      <td>Service name: <code>'vercel'</code>, <code>'github'</code>, <code>'google'</code>, <code>'slack'</code>, <code>'apple'</code>, <code>'microsoft'</code>, <code>'aws'</code>, <code>'okta'</code>, <code>'mongoatlas'</code>, <code>'resend'</code>, or <code>'stripe'</code></td>
+      <td>Service name: <code>'vercel'</code>, <code>'github'</code>, <code>'google'</code>, <code>'slack'</code>, <code>'apple'</code>, <code>'microsoft'</code>, <code>'okta'</code>, <code>'aws'</code>, <code>'resend'</code>, <code>'stripe'</code>, <code>'mongoatlas'</code>, <code>'clerk'</code>, or <code>'linear'</code></td>
     </tr>
     <tr>
       <td><code>port</code></td>
@@ -109,7 +109,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
 Each emulator is published as its own `@emulators/*` package. Install only the ones you need:
 
 ```bash
-npm install @emulators/github @emulators/google @emulators/stripe
+npm install @emulators/github @emulators/google @emulators/linear
 ```
 
 ### Available packages
@@ -126,6 +126,7 @@ npm install @emulators/github @emulators/google @emulators/stripe
     <tr><td><code>@emulators/github</code></td><td>GitHub API</td></tr>
     <tr><td><code>@emulators/google</code></td><td>Google OAuth, Gmail, Calendar, Drive</td></tr>
     <tr><td><code>@emulators/slack</code></td><td>Slack Web API, OAuth v2, webhooks</td></tr>
+    <tr><td><code>@emulators/linear</code></td><td>Linear GraphQL API, OAuth, webhooks</td></tr>
     <tr><td><code>@emulators/apple</code></td><td>Apple Sign In / OIDC</td></tr>
     <tr><td><code>@emulators/microsoft</code></td><td>Microsoft Entra ID, Graph API</td></tr>
     <tr><td><code>@emulators/aws</code></td><td>AWS S3, SQS, IAM, STS</td></tr>
@@ -133,18 +134,20 @@ npm install @emulators/github @emulators/google @emulators/stripe
     <tr><td><code>@emulators/mongoatlas</code></td><td>MongoDB Atlas Admin API + Data API</td></tr>
     <tr><td><code>@emulators/resend</code></td><td>Resend email API</td></tr>
     <tr><td><code>@emulators/stripe</code></td><td>Stripe billing and payments API</td></tr>
+    <tr><td><code>@emulators/clerk</code></td><td>Clerk Backend API and OAuth</td></tr>
     <tr><td><code>@emulators/core</code></td><td>Shared store, middleware, and utilities</td></tr>
     <tr><td><code>@emulators/adapter-next</code></td><td>Next.js App Router integration</td></tr>
+    <tr><td><code>@emulators/adapter-nuxt</code></td><td>Nuxt server route integration</td></tr>
   </tbody>
 </table>
 
 ### Direct usage
 
-Each scoped package exports its Hono app and seed function, so you can compose emulators however you like:
+Each scoped package exports its service plugin and seed helpers:
 
 ```typescript
 import * as github from '@emulators/github'
 import * as stripe from '@emulators/stripe'
 ```
 
-These are the same modules used internally by the CLI and the [Next.js adapter](/docs/nextjs). See the Next.js Integration page for a full example of using scoped packages with `createEmulateHandler`.
+These are the same modules used internally by the CLI and the [Next.js adapter](/docs/nextjs) or [Nuxt adapter](/docs/nuxt). See the framework integration pages for full examples of using scoped packages with `createEmulateHandler`.

@@ -1,8 +1,8 @@
-import type { Hono } from "hono";
+import type { Hono } from "@emulators/core";
 import type { AppEnv, RouteContext, ServicePlugin, Store, WebhookDispatcher, TokenMap } from "@emulators/core";
 import type { VercelEnvVar } from "./entities.js";
 import { getVercelStore } from "./store.js";
-import { generateUid, nowMs } from "./helpers.js";
+import { generateUid, nowMs, stableUid } from "./helpers.js";
 import { userRoutes } from "./routes/user.js";
 import { projectsRoutes } from "./routes/projects.js";
 import { deploymentsRoutes } from "./routes/deployments.js";
@@ -10,6 +10,7 @@ import { domainsRoutes } from "./routes/domains.js";
 import { envRoutes } from "./routes/env.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { apiKeysRoutes } from "./routes/api-keys.js";
+import { blobRoutes } from "./routes/blob.js";
 
 export { getVercelStore, type VercelStore } from "./store.js";
 export * from "./entities.js";
@@ -53,7 +54,7 @@ function seedDefaults(store: Store, _baseUrl: string): void {
   const vs = getVercelStore(store);
 
   vs.users.insert({
-    uid: generateUid("user"),
+    uid: stableUid("user", "vercel.user.admin"),
     email: "admin@localhost",
     username: "admin",
     name: "Admin",
@@ -75,7 +76,7 @@ export function seedFromConfig(store: Store, baseUrl: string, config: VercelSeed
       const existing = vs.users.findOneBy("username", u.username);
       if (existing) continue;
       vs.users.insert({
-        uid: generateUid("user"),
+        uid: stableUid("user", `vercel.user.${u.username}`),
         email: u.email ?? `${u.username}@localhost`,
         username: u.username,
         name: u.name ?? null,
@@ -218,6 +219,7 @@ export const vercelPlugin: ServicePlugin = {
     domainsRoutes(ctx);
     envRoutes(ctx);
     apiKeysRoutes(ctx);
+    blobRoutes(ctx);
   },
   seed(store: Store, baseUrl: string): void {
     seedDefaults(store, baseUrl);
