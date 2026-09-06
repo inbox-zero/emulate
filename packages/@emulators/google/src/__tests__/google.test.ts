@@ -253,6 +253,51 @@ describe("Google plugin integration", () => {
     app = createTestApp().app;
   });
 
+  it("returns a mailbox profile whose history cursor tracks subsequent changes", async () => {
+    const response = await jsonRequest(app, "/gmail/v1/users/me/profile");
+    expect(response.status).toBe(200);
+    const profile = (await response.json()) as {
+      emailAddress: string;
+      messagesTotal: number;
+      threadsTotal: number;
+      historyId: string;
+    };
+    expect(profile).toMatchObject({
+      emailAddress: "testuser@example.com",
+      messagesTotal: 4,
+      threadsTotal: 3,
+      historyId: expect.any(String),
+    });
+
+    const modified = await jsonRequest(app, "/gmail/v1/users/me/messages/msg_support_1/modify", {
+      method: "POST",
+      body: { removeLabelIds: ["UNREAD"] },
+    });
+    expect(modified.status).toBe(200);
+    const historyResponse = await jsonRequest(app, `/gmail/v1/users/me/history?startHistoryId=${profile.historyId}`);
+    const history = (await historyResponse.json()) as { historyId: string; history: unknown[] };
+    expect(history.history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          labelsRemoved: expect.arrayContaining([
+            expect.objectContaining({
+              message: expect.objectContaining({ id: "msg_support_1" }),
+              labelIds: ["UNREAD"],
+            }),
+          ]),
+        }),
+      ]),
+    );
+    const updated = await jsonRequest(app, "/gmail/v1/users/testuser@example.com/profile");
+    expect(await updated.json()).toMatchObject({ ...profile, historyId: history.historyId });
+    expect(BigInt(history.historyId)).toBeGreaterThan(BigInt(profile.historyId));
+  });
+
+  it("does not expose another user's mailbox profile", async () => {
+    const response = await jsonRequest(app, "/gmail/v1/users/consumer@gmail.com/profile");
+    expect(response.status).toBe(404);
+  });
+
   it("returns user info for a valid token", async () => {
     const res = await app.request(`${base}/oauth2/v2/userinfo`, { headers: authHeaders() });
     expect(res.status).toBe(200);
