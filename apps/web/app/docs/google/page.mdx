@@ -12,6 +12,7 @@ OAuth 2.0, OpenID Connect, and mutable Google Workspace-style surfaces for local
 
 ## Gmail
 
+- `GET /gmail/v1/users/:userId/profile` - mailbox email address, message and thread totals, and current history ID
 - `GET /gmail/v1/users/:userId/messages` - list messages (`q`, `labelIds`, `maxResults`, `pageToken`)
 - `GET /gmail/v1/users/:userId/messages/:id` - get message (`full`, `metadata`, `minimal`, `raw` formats)
 - `GET /gmail/v1/users/:userId/messages/:messageId/attachments/:id` - get attachment

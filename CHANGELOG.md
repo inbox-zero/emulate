@@ -1,6 +1,14 @@
 # Changelog
 
 <!-- release:start -->
+## 0.9.1
+
+### Fixes
+
+- Add the Gmail mailbox profile endpoint with message and thread totals and a history cursor for snapshot-to-delta synchronization.
+
+<!-- release:end -->
+
 ## 0.9.0
 
 ### New Features
@@ -16,7 +24,6 @@
 
 - @ctate
 
-<!-- release:end -->
 
 ## 0.8.0
 

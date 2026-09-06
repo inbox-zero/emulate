@@ -271,6 +271,8 @@ curl -X POST http://localhost:4002/oauth2/revoke \
 
 ## Gmail API
 
+`GET /gmail/v1/users/:userId/profile` returns `emailAddress`, `messagesTotal`, `threadsTotal`, and the current `historyId`. Use this cursor before a mailbox snapshot, then request history after it to reconcile concurrent changes.
+
 All Gmail endpoints are under `/gmail/v1/users/:userId/...` where `:userId` is `me` or the authenticated user's email.
 
 ### Messages

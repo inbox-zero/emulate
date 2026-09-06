@@ -22,6 +22,18 @@ const WATCH_STATE_KEY = "google.gmail.watchStates";
 export function historyRoutes({ app, store }: RouteContext): void {
   const gs = getGoogleStore(store);
 
+  app.get("/gmail/v1/users/:userId/profile", (c) => {
+    const authEmail = requireGmailUser(c);
+    if (authEmail instanceof Response) return authEmail;
+    const messages = gs.messages.findBy("user_email", authEmail);
+    return c.json({
+      emailAddress: authEmail,
+      messagesTotal: messages.length,
+      threadsTotal: new Set(messages.map((message) => message.thread_id)).size,
+      historyId: getCurrentHistoryId(gs, authEmail),
+    });
+  });
+
   app.get("/gmail/v1/users/:userId/history", (c) => {
     const authEmail = requireGmailUser(c);
     if (authEmail instanceof Response) return authEmail;
