@@ -44,6 +44,12 @@ This creates these routes:
 - `/emulate/github/**` serves the GitHub emulator
 - `/emulate/google/**` serves the Google emulator
 
+## GitHub App Private Keys
+
+GitHub App seeds may omit `private_key`; retain the handler and call server-only `generatedSecrets()`. Keep persisted generated keys private and implement atomic `initialize`.
+
+Minted GitHub App installation-token metadata is available at `/emulate/github/_emulate/installation-tokens`.
+
 ## Nuxt Config
 
 Emulator UI pages use bundled fonts. Wrap your Nuxt config so Nitro traces the core package assets into production builds:
@@ -106,6 +112,8 @@ import { filePersistence } from '@emulators/core'
 persistence: filePersistence('.emulate/state.json'),
 ```
 
+Generated identities require atomic create-or-read `initialize`; see `@emulators/core`.
+
 ### How It Works
 
 - **Cold start**: The adapter loads state from the persistence adapter. If found, it restores the full Store and token map. If not found, it seeds from config and saves the initial state.
@@ -137,4 +145,4 @@ export default defineEventHandler(createEmulateHandler(config, { routePrefix: '/
 ## Limitations
 
 - Requires a Node-compatible Nuxt server runtime since emulators use Node APIs
-- Concurrent serverless instances writing to the same persistence adapter use last write wins semantics, which is acceptable for dev and preview traffic
+- Concurrent mutations use last-write-wins semantics. Generated identities use `initialize` to select the initial snapshot atomically across cold starts.

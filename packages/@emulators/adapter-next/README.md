@@ -26,7 +26,7 @@ import { createEmulateHandler } from '@emulators/adapter-next'
 import * as github from '@emulators/github'
 import * as google from '@emulators/google'
 
-export const { GET, POST, PUT, PATCH, DELETE } = createEmulateHandler({
+export const emulator = createEmulateHandler({
   services: {
     github: {
       emulator: github,
@@ -43,7 +43,13 @@ export const { GET, POST, PUT, PATCH, DELETE } = createEmulateHandler({
     },
   },
 })
+
+export const { GET, POST, PUT, PATCH, DELETE } = emulator
 ```
+
+GitHub App seeds may omit `private_key`. Read generated keys with the handler's server-only `generatedSecrets()` method. Explicit keys are excluded; persisted snapshots contain generated keys and require a private backend with atomic `initialize`.
+
+Inspect minted installation-token metadata at `/emulate/github/_emulate/installation-tokens`.
 
 ## Auth.js / NextAuth configuration
 

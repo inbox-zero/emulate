@@ -2,6 +2,50 @@
 
 Every endpoint below is fully stateful. Creates, updates, and deletes persist in memory and affect related entities.
 
+## GitHub App keys
+
+The programmatic `createEmulator` API can generate a GitHub App key when `private_key` is omitted:
+
+```typescript
+const github = await createEmulator({
+  service: 'github',
+  seed: {
+    github: {
+      users: [{ login: 'octocat' }],
+      apps: [{
+        app_id: 12345,
+        slug: 'my-github-app',
+        name: 'My GitHub App',
+        installations: [{ installation_id: 100, account: 'octocat' }],
+      }],
+    },
+  },
+})
+
+const privateKey = github.generatedSecrets.find(
+  secret => secret.kind === 'github.app_private_key' && secret.id === '12345',
+)?.value
+```
+
+The generated RSA-2048 PKCS#1 key remains stable across `reset()` calls. Explicit keys are never included in `generatedSecrets`.
+
+The Next.js and Nuxt adapters also generate omitted keys. Their returned server handlers expose `generatedSecrets()`, and persistence restores the same identity across cold starts. Keep persisted snapshots private because they contain the signing key. Custom persistence backends must implement atomic `initialize()` semantics when generated identities are used.
+
+## Installation token inspection
+
+`GET /_emulate/installation-tokens` lists metadata for GitHub App installation tokens minted by the current emulator state. It includes App, installation, account, permissions, repository access, issuance, expiry, and lifecycle status without exposing token values or token-derived identifiers.
+
+Expiry is informational and does not change authorization behavior. `createEmulator().reset()` clears minted installation-specific authorization and metadata while preserving seeded tokens, generated App keys, and existing fallback-token behavior. Persisted Next.js and Nuxt adapters restore the metadata with their private snapshot.
+
+The CLI can generate omitted keys when you request a private delivery file:
+
+```bash
+npx @inbox-zero/emulate start --service github --seed emulate.config.yaml \
+  --generated-secrets-file .emulate-secrets.json
+```
+
+The destination must not exist. emulate removes inherited ACLs, verifies effective owner-only access, and publishes complete JSON before opening listeners or configuring portless. Handled startup failures remove the invocation-owned artifact. A hard termination can leave a complete artifact that must be removed manually after confirming no invocation is using it. Only generated keys appear in the artifact. Linux requires `setfacl` and `getfacl` from the `acl` package. The flag fails closed when access controls cannot be verified and is not supported on Windows. Without `--generated-secrets-file`, CLI seed files still require `private_key`. Direct `seedFromConfig` calls always require it.
+
 ## Users
 
 - `GET /user` - authenticated user
@@ -16,6 +60,7 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 ## Repositories
 
 - `GET /repos/:owner/:repo` - get repo
+- `GET /repositories/:id` - get repo by numeric ID
 - `POST /user/repos` - create user repo
 - `POST /orgs/:org/repos` - create org repo
 - `PATCH /repos/:owner/:repo` - update repo
@@ -29,6 +74,16 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 - `GET /repos/:owner/:repo/collaborators/:username/permission`
 - `POST /repos/:owner/:repo/transfer` - transfer repo
 - `GET /repos/:owner/:repo/tags` - list tags
+
+## Contents & Commit History
+
+- `GET /repos/:owner/:repo/readme` - get the repository README
+- `GET /repos/:owner/:repo/contents/:path` - get a file or list a directory at a ref
+- `GET /:owner/:repo/raw/:ref/:path` - download file content from advertised raw URLs
+- `PUT/DELETE /repos/:owner/:repo/contents/:path` - create, update, or delete a file and commit the change
+- `GET /repos/:owner/:repo/commits` - list commits with ref, path, author, and date filters
+- `GET /repos/:owner/:repo/commits/:ref` - get a commit with file diffs and stats
+- `GET /repos/:owner/:repo/compare/:base...:head` - compare two refs
 
 ## Issues
 

@@ -20,6 +20,16 @@ program
 Framework adapters:
   Embed emulators in app routes with @emulators/adapter-next or @emulators/adapter-nuxt.
   Docs: https://emulate.dev/docs/nextjs and https://emulate.dev/docs/nuxt
+
+GitHub API coverage:
+  Includes repository contents, raw downloads, commit history, commit details, and ref comparisons.
+  Inspect minted installation-token metadata at GET /_emulate/installation-tokens.
+
+Linear API coverage:
+  Issue queries and mutations include numeric priority and derived priorityLabel fields.
+
+Webhook signatures:
+  Stripe webhook secrets produce a Stripe-Signature header for raw-body verification.
 `,
   );
 
@@ -31,19 +41,34 @@ program
   .option("--seed <file>", "Path to seed config file")
   .option("--base-url <url>", "Override advertised base URL (supports {service} template)")
   .option("--portless", "Serve over HTTPS via portless (auto-registers aliases)")
+  .option(
+    "--generated-secrets-file <path>",
+    "Write service-generated secrets to a new owner-only JSON file (Linux requires setfacl and getfacl)",
+  )
   .action(async (opts) => {
     const port = parseInt(opts.port, 10);
     if (Number.isNaN(port) || port < 1 || port > 65535) {
       console.error(`Invalid port: ${opts.port}`);
       process.exit(1);
     }
-    await startCommand({
+    const options = {
       port,
       service: opts.service,
       seed: opts.seed,
       baseUrl: opts.baseUrl,
       portless: opts.portless,
-    });
+      generatedSecretsFile: opts.generatedSecretsFile,
+    };
+    if (!opts.generatedSecretsFile) {
+      await startCommand(options);
+      return;
+    }
+    try {
+      await startCommand(options);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   });
 
 program

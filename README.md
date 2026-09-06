@@ -25,6 +25,8 @@ All services start with sensible defaults. No config file needed:
 - **Linear** on `http://localhost:4012`
 - **Twilio** on `http://localhost:4013`
 
+Stripe webhooks configured with a secret include a `Stripe-Signature` header signed over the timestamp and raw request body.
+
 ## CLI
 
 ```bash
@@ -39,6 +41,9 @@ npx @inbox-zero/emulate --port 3000
 
 # Use a seed config file
 npx @inbox-zero/emulate --seed config.yaml
+
+# Generate omitted service secrets into a private file
+npx @inbox-zero/emulate start --seed config.yaml --generated-secrets-file .emulate-secrets.json
 
 # Generate a starter config
 npx @inbox-zero/emulate init
@@ -59,6 +64,7 @@ npx @inbox-zero/emulate list
 | `--seed` | auto-detect | Path to seed config (YAML or JSON) |
 | `--base-url` | none | Override advertised base URL (supports `{service}` template) |
 | `--portless` | off | Serve over HTTPS via portless (auto-registers aliases) |
+| `--generated-secrets-file` | none | Generate omitted service secrets and write them to a new owner-only JSON file |
 
 The port can also be set via `EMULATE_PORT` or `PORT` environment variables.
 
@@ -122,6 +128,40 @@ await github.close()
 await vercel.close()
 ```
 
+When a GitHub App omits `private_key`, `createEmulator` generates an RSA-2048 PKCS#1 key for that emulator instance:
+
+```typescript
+const github = await createEmulator({
+  service: 'github',
+  seed: {
+    github: {
+      users: [{ login: 'octocat' }],
+      apps: [{
+        app_id: 12345,
+        slug: 'my-github-app',
+        name: 'My GitHub App',
+        installations: [{ installation_id: 100, account: 'octocat' }],
+      }],
+    },
+  },
+})
+
+const privateKey = github.generatedSecrets.find(
+  secret => secret.kind === 'github.app_private_key' && secret.id === '12345',
+)?.value
+```
+
+Generated keys remain stable across `reset()` calls and appear only in `generatedSecrets`. Explicitly configured keys are never returned there. A new `createEmulator` call generates a new key.
+
+The CLI can also generate omitted GitHub App keys when a delivery file is requested:
+
+```bash
+npx @inbox-zero/emulate start --service github --seed config.yaml \
+  --generated-secrets-file .emulate-secrets.json
+```
+
+The destination must not exist. emulate removes inherited ACLs, verifies effective owner-only access, and publishes complete JSON before opening listeners or configuring portless. Handled startup failures remove the invocation-owned artifact so the command can be retried immediately. A hard termination such as `SIGKILL` can leave a complete published artifact that must be removed manually after confirming no invocation is using it. Only generated secrets are included. Explicitly configured keys are never copied into the artifact. Linux requires `setfacl` and `getfacl` from the `acl` package. The flag fails closed when access controls cannot be verified and is not supported on Windows. Without `--generated-secrets-file`, CLI seed files keep requiring `private_key`.
+
 ### Vitest / Jest setup
 
 ```typescript
@@ -158,6 +198,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
 | Method | Description |
 |--------|-------------|
 | `url` | Base URL of the running server |
+| `generatedSecrets` | Readonly secrets generated while preparing seed data |
 | `reset()` | Wipe the store and replay seed data |
 | `close()` | Shut down the HTTP server, returns a Promise |
 
@@ -483,6 +524,8 @@ github:
 
 JWT authentication: sign a JWT with `{ iss: "<app_id>" }` using the app's private key (RS256). The emulator verifies the signature and resolves the app.
 
+Inspect secret-free metadata for minted installation tokens at `GET /_emulate/installation-tokens`.
+
 **App webhook delivery**: When events occur on repos where a GitHub App is installed, the emulator mirrors real GitHub behavior:
 - All webhook payloads (including repo and org hooks) include an `installation` field with `{ id, node_id }`.
 - If the app has a `webhook_url`, the emulator delivers the event there with the `installation` field and (if configured) an `X-Hub-Signature-256` header signed with `webhook_secret`.
@@ -620,6 +663,7 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 
 ### Repositories
 - `GET /repos/:owner/:repo` - get repo
+- `GET /repositories/:id` - get repo by numeric ID
 - `POST /user/repos` - create user repo
 - `POST /orgs/:org/repos` - create org repo
 - `PATCH /repos/:owner/:repo` - update repo
@@ -633,6 +677,15 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 - `GET /repos/:owner/:repo/collaborators/:username/permission`
 - `POST /repos/:owner/:repo/transfer` - transfer repo
 - `GET /repos/:owner/:repo/tags` - list tags
+
+### Contents & Commit History
+- `GET /repos/:owner/:repo/readme` - get the repository README
+- `GET /repos/:owner/:repo/contents/:path` - get a file or list a directory at a ref
+- `GET /:owner/:repo/raw/:ref/:path` - download file content from advertised raw URLs
+- `PUT/DELETE /repos/:owner/:repo/contents/:path` - create, update, or delete a file and commit the change
+- `GET /repos/:owner/:repo/commits` - list commits with ref, path, author, and date filters
+- `GET /repos/:owner/:repo/commits/:ref` - get a commit with file diffs and stats
+- `GET /repos/:owner/:repo/compare/:base...:head` - compare two refs
 
 ### Issues
 - `GET /repos/:owner/:repo/issues` - list (filter by state, labels, assignee, milestone, creator, since)
@@ -849,6 +902,8 @@ Stateful Linear GraphQL API emulation with seeded organizations, users, teams, w
 - Queries: `viewer`, `organization`, `users`, `user`, `teams`, `team`, `workflowStates`, `workflowState`, `issues`, `issue`, `comments`, `comment`, `issueLabels`, `issueLabel`, `projects`, `project`, `cycles`, `cycle`, `webhooks`, `webhook`, `agentSessions`, `agentSession`
 - Mutations: `issueCreate`, `issueUpdate`, `issueDelete`, `issueArchive`, `issueUnarchive`, `commentCreate`, `commentUpdate`, `commentDelete`, `issueLabelCreate`, `issueLabelUpdate`, `issueLabelDelete`, `issueAddLabel`, `issueRemoveLabel`, `webhookCreate`, `webhookDelete`, `agentSessionCreateOnIssue`, `agentSessionCreateOnComment`, `agentSessionUpdate`, `agentActivityCreate`
 
+Issue selections expose both numeric `priority` and Linear's derived `priorityLabel` values: `No priority`, `Urgent`, `High`, `Medium`, and `Low`.
+
 ### OAuth
 
 - `GET /oauth/authorize` - authorization endpoint with local user picker
@@ -1024,6 +1079,8 @@ export const { GET, POST, PUT, PATCH, DELETE } = createEmulateHandler({
 })
 ```
 
+GitHub App seeds may omit `private_key`. Retain the handler to call server-only `generatedSecrets()`; explicit keys are excluded. Persisted snapshots contain generated keys, so keep the backend private.
+
 ### Auth.js / NextAuth configuration
 
 Point your provider at the emulator paths on the same origin:
@@ -1093,7 +1150,7 @@ import { filePersistence } from '@emulators/core'
 persistence: filePersistence('.emulate/state.json'),
 ```
 
-The persistence adapter is called on cold start (load) and after every mutating request (save). Saves are serialized via an internal queue to prevent race conditions.
+The persistence adapter loads on cold start and saves after mutations. Generated identities also require atomic create-or-read `initialize`; see `@emulators/core`.
 
 ## Nuxt Integration
 
@@ -1135,6 +1192,8 @@ export default defineEventHandler(createEmulateHandler({
   },
 }))
 ```
+
+GitHub App seeds may omit `private_key`. Retain the handler to call server-only `generatedSecrets()`; explicit keys are excluded. Persisted snapshots contain generated keys, so keep the backend private.
 
 ### Nuxt config
 
@@ -1186,7 +1245,7 @@ export default defineEventHandler(createEmulateHandler({
 }))
 ```
 
-The persistence adapter is called on cold start (load) and after every mutating request (save). Saves are serialized via an internal queue to prevent race conditions.
+The persistence adapter loads on cold start and saves after mutations. Generated identities also require atomic create-or-read `initialize`; see `@emulators/core`.
 
 ## Architecture
 

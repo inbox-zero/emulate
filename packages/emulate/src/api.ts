@@ -1,4 +1,4 @@
-import { createServer, serve, type AppKeyResolver, type Store } from "@emulators/core";
+import { createServer, serve, type AppKeyResolver } from "@emulators/core";
 import { SERVICE_REGISTRY } from "./registry.js";
 export type { ServiceName } from "./registry.js";
 import type { ServiceName } from "./registry.js";
@@ -16,8 +16,17 @@ export interface EmulatorOptions {
   baseUrl?: string;
 }
 
+export interface GeneratedSecret {
+  readonly service: ServiceName;
+  readonly kind: string;
+  readonly id: string;
+  readonly label: string;
+  readonly value: string;
+}
+
 export interface Emulator {
   url: string;
+  readonly generatedSecrets: readonly GeneratedSecret[];
   reset(): void;
   close(): Promise<void>;
 }
@@ -42,7 +51,13 @@ export async function createEmulator(options: EmulatorOptions): Promise<Emulator
     tokens["test_token_admin"] = { login: "admin", id: 2, scopes: ["repo", "user", "admin:org", "admin:repo_hook"] };
   }
 
-  const svcSeedConfig = seedConfig?.[service] as Record<string, unknown> | undefined;
+  const inputSvcSeedConfig = seedConfig?.[service] as Record<string, unknown> | undefined;
+  const preparedSeed =
+    inputSvcSeedConfig && loaded.prepareSeed ? await loaded.prepareSeed(inputSvcSeedConfig) : undefined;
+  const svcSeedConfig = preparedSeed?.config ?? inputSvcSeedConfig;
+  const generatedSecrets: readonly GeneratedSecret[] = Object.freeze(
+    (preparedSeed?.generatedSecrets ?? []).map((secret) => Object.freeze({ service, ...secret })),
+  );
   const seedBaseUrl =
     typeof svcSeedConfig?.baseUrl === "string" && svcSeedConfig.baseUrl.length > 0 ? svcSeedConfig.baseUrl : undefined;
   const baseUrl = resolveBaseUrl({ service, port, baseUrl: options.baseUrl, seedBaseUrl });
@@ -55,7 +70,13 @@ export async function createEmulator(options: EmulatorOptions): Promise<Emulator
 
   const fallbackUser = entry.defaultFallback(svcSeedConfig);
 
-  const { app, store, webhooks } = createServer(loaded.plugin, { port, baseUrl, tokens, appKeyResolver, fallbackUser });
+  const { app, store, webhooks, tokenMap } = createServer(loaded.plugin, {
+    port,
+    baseUrl,
+    tokens,
+    appKeyResolver,
+    fallbackUser,
+  });
   cachedResolver = loaded.createAppKeyResolver?.(store);
 
   const seed = () => {
@@ -70,7 +91,11 @@ export async function createEmulator(options: EmulatorOptions): Promise<Emulator
 
   return {
     url: baseUrl,
+    generatedSecrets,
     reset() {
+      for (const [token, user] of tokenMap) {
+        if (user.installation) tokenMap.delete(token);
+      }
       store.reset();
       seed();
     },
