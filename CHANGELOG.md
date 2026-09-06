@@ -1,13 +1,52 @@
 # Changelog
 
 <!-- release:start -->
+## 0.11.1
+
+### Improvements
+
+- Include upstream changes through 7cf250f: GitHub contents and commit APIs, installation-token inspection, persistent adapter state, secure generated-secret delivery, Linear priority labels, and Stripe webhook signatures.
+- Preserve the bundled `@inbox-zero/emulate` distribution and Gmail mailbox profile endpoint for snapshot-to-delta synchronization.
+
+<!-- release:end -->
+
+## 0.11.0
+
+### New Features
+
+- **Persistent adapter runtime** shares state handling across the Next.js and Nuxt adapters, including atomic initialization and generated GitHub App key persistence across cold starts
+- **Linear issue priority labels** expose the derived `priorityLabel` alongside numeric issue priority in queries and mutations
+- **GitHub installation-token inspection** exposes secret-free metadata for minted App installation tokens, including permissions, repository access, expiry, and lifecycle status
+
+### Contributors
+
+- @ctate
+- @Railly
+
+## 0.10.0
+
+### New Features
+
+- **Expanded GitHub repository APIs** add stateful contents, README, commits, comparisons, raw file downloads, Git Data shapes, branch isolation, and commit-producing file writes (#191)
+- **Generated GitHub App keys** let `createEmulator` generate RSA private keys for GitHub Apps that omit `private_key`, expose generated material through `generatedSecrets`, and preserve it across resets (#200)
+
+### Bug Fixes
+
+- Fixed **Stripe webhook signatures** to send Stripe-compatible `Stripe-Signature` headers over the raw request body (#198)
+- Fixed **GitHub App JWT verification** for documented PKCS#1 keys and PKCS#8 keys by deriving public key material before verification (#199)
+
+### Contributors
+
+- @ctate
+- @EfeDurmaz16
+- @Railly
+- @sidpalas
+
 ## 0.9.1
 
 ### Fixes
 
 - Add the Gmail mailbox profile endpoint with message and thread totals and a history cursor for snapshot-to-delta synchronization.
-
-<!-- release:end -->
 
 ## 0.9.0
 
@@ -23,7 +62,6 @@
 ### Contributors
 
 - @ctate
-
 
 ## 0.8.0
 

@@ -39,6 +39,9 @@ npx @inbox-zero/emulate --port 3000
 # Use a seed config file
 npx @inbox-zero/emulate --seed config.yaml
 
+# Generate omitted service secrets into a private file
+npx @inbox-zero/emulate start --seed config.yaml --generated-secrets-file .emulate-secrets.json
+
 # Generate a starter config
 npx @inbox-zero/emulate init
 
@@ -75,8 +78,15 @@ npx @inbox-zero/emulate list
       <td>auto-detect</td>
       <td>Path to seed config (YAML or JSON)</td>
     </tr>
+    <tr>
+      <td><code>--generated-secrets-file</code></td>
+      <td>none</td>
+      <td>Generate omitted service secrets and write them to a new owner-only JSON file</td>
+    </tr>
   </tbody>
 </table>
+
+The generated-secrets destination must not exist. emulate removes inherited ACLs, verifies effective owner-only access, and publishes the complete file before startup. Handled startup failures remove the invocation-owned artifact. A hard termination can leave a complete artifact that requires manual recovery. Linux requires `setfacl` and `getfacl` from the `acl` package. The flag fails closed when access controls cannot be verified and is not supported on Windows.
 
 The port can also be set via `EMULATE_PORT` or `PORT` environment variables.
 
@@ -87,3 +97,5 @@ You can also use emulate as a library in your tests. See the [Programmatic API](
 ## Framework Integration
 
 Embed emulators directly in your Next.js or Nuxt app so they run on the same origin. See the [Next.js Integration](/docs/nextjs) and [Nuxt Integration](/docs/nuxt) pages for setup instructions.
+
+GitHub App flows expose secret-free installation-token metadata through an emulator-only inspection route. See the [GitHub documentation](/docs/github) for details.

@@ -50,7 +50,7 @@ When a change affects how humans or agents use emulate (new/changed/removed comm
 
 ## Releasing
 
-Releases are manual, single-PR affairs. The maintainer controls the changelog voice and format. All packages share a single version number (`emulate` + every `@emulators/*`).
+Releases are manual, single-PR affairs. The maintainer controls the changelog voice and format. All packages share a single version number (`@inbox-zero/emulate` + every `@emulators/*`).
 
 To prepare a release:
 
@@ -61,7 +61,7 @@ To prepare a release:
 5. Remove the `<!-- release:start -->` and `<!-- release:end -->` markers from the previous release entry (only the latest release should have markers)
 6. Open a PR and merge to `main`
 
-CI compares the version in `packages/emulate/package.json` to what's on npm. If it differs, it builds, publishes all packages with provenance, and creates the GitHub release automatically. The release body is extracted from the content between the markers.
+CI compares the version in `packages/emulate/package.json` to what's on npm. If it differs, it builds, publishes only the bundled `@inbox-zero/emulate` package with provenance, and creates the GitHub release automatically. The `@emulators/*` packages remain build inputs and must not be published from this fork. The release body is extracted from the content between the markers.
 
 <!-- opensrc:start -->
 

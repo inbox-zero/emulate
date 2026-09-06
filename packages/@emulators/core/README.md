@@ -34,12 +34,16 @@ persistence: filePersistence('.emulate/state.json')
 
 ### Custom adapter
 
-Any object with `load` and `save` methods works:
+Any object with `load` and `save` methods works. Add `initialize` when a service generates durable identity:
 
 ```typescript
 const kvAdapter = {
   async load() { return await kv.get('emulate-state') },
   async save(data: string) { await kv.set('emulate-state', data) },
+  async initialize(data: string) { // atomic create-or-read
+    await kv.set('emulate-state', data, { nx: true })
+    return (await kv.get('emulate-state'))!
+  },
 }
 ```
 

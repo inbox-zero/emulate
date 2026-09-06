@@ -3,7 +3,7 @@ import { ApiError, parseJsonBody, parsePagination, setLinkHeader } from "@emulat
 import { getGitHubStore } from "../store.js";
 import {
   assertAuthenticatedUser,
-  assertRepoRead,
+  assertRepoPermission,
   assertRepoWrite,
   notFoundResponse,
   ownerLoginOf,
@@ -28,6 +28,7 @@ import {
   lookupRepo,
   timestamp,
 } from "../helpers.js";
+import { findOrCreateCommit } from "../git-helpers.js";
 
 function findPull(gh: GitHubStore, repoId: number, pullNumber: number): GitHubPullRequest | undefined {
   return gh.pullRequests.findBy("repo_id", repoId).find((p) => p.number === pullNumber);
@@ -145,10 +146,7 @@ function insertCommit(
   const login = u?.login ?? "user";
   const email = u?.email ?? `${login}@users.noreply.github.com`;
   const now = timestamp();
-  const row = gh.commits.insert({
-    repo_id: repo.id,
-    sha: generateSha(),
-    node_id: "",
+  return findOrCreateCommit(gh, repo.id, {
     message: opts.message,
     author_name: authorName,
     author_email: email,
@@ -159,9 +157,7 @@ function insertCommit(
     tree_sha: opts.treeSha,
     parent_shas: opts.parentShas,
     user_id: u?.id ?? null,
-  } as Omit<GitHubCommit, "id" | "created_at" | "updated_at">);
-  gh.commits.update(row.id, { node_id: generateNodeId("Commit", row.id) });
-  return gh.commits.get(row.id)!;
+  });
 }
 
 function formatCommitApi(commit: GitHubCommit, repo: GitHubRepo, baseUrl: string) {
@@ -310,7 +306,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repoName = c.req.param("repo")!;
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
-    assertRepoRead(gh, c.get("authUser"), repo);
+    assertRepoPermission(gh, c.get("authUser"), repo, "pull_requests");
 
     const stateQ = c.req.query("state") ?? "open";
     const state: "open" | "closed" | "all" =
@@ -472,7 +468,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repoName = c.req.param("repo")!;
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
-    assertRepoRead(gh, c.get("authUser"), repo);
+    assertRepoPermission(gh, c.get("authUser"), repo, "pull_requests");
 
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
@@ -728,7 +724,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repoName = c.req.param("repo")!;
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
-    assertRepoRead(gh, c.get("authUser"), repo);
+    assertRepoPermission(gh, c.get("authUser"), repo, "pull_requests");
 
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
@@ -754,7 +750,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repoName = c.req.param("repo")!;
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
-    assertRepoRead(gh, c.get("authUser"), repo);
+    assertRepoPermission(gh, c.get("authUser"), repo, "pull_requests");
 
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
