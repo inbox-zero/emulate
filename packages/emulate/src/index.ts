@@ -29,7 +29,8 @@ Linear API coverage:
   Issue queries and mutations include numeric priority and derived priorityLabel fields.
 
 Microsoft Graph mail search:
-  Supports literal text, quoted phrases, AND, and subject/body/participant restrictions.
+  Supports literal text, quoted phrases, AND/OR/NOT, parentheses, text fields, importance and attachments.
+  Includes numeric-byte size ranges and ISO-date received ranges.
   Search applies before pagination; unsupported structured expressions return HTTP 400.
 
 Webhook signatures:

@@ -197,6 +197,7 @@ export function graphRoutes(ctx: RouteContext): void {
       c,
       filterMessages(ms.messages.findBy("user_email", authEmail), c.req.query("$filter")),
       c.req.query("$search"),
+      ms.attachments.all(),
     );
     if (searched instanceof Response) return searched;
     const filtered = sortMessages(searched, c.req.query("$orderby"));
@@ -226,6 +227,7 @@ export function graphRoutes(ctx: RouteContext): void {
         c.req.query("$filter"),
       ),
       c.req.query("$search"),
+      ms.attachments.all(),
     );
     if (searched instanceof Response) return searched;
     const filtered = sortMessages(searched, c.req.query("$orderby"));
