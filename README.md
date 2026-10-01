@@ -1003,6 +1003,10 @@ Microsoft Entra ID (Azure AD) v2.0 OAuth 2.0 and OpenID Connect emulation with a
 - `GET /oauth2/v2.0/logout` - end session / logout
 - `POST /oauth2/v2.0/revoke` - token revocation
 
+### Graph mail search
+
+`GET /v1.0/me/messages` and `GET /v1.0/me/mailFolders/{folderId}/messages` accept URL-encoded `$search` expressions enclosed in one outer quoted string. Search supports literal text, escaped quoted phrases, implicit conjunction, `AND`, `OR`, unary `NOT`, parentheses, and `subject:`, `body:`, `participants:`, `from:`, `to:`, `cc:`, and `bcc:` restrictions. For example, pass `JSON.stringify('subject:"monthly report" AND participants:"person@example.com"')` as the `$search` query parameter using `URLSearchParams`. Search runs before `$top`/`$skip` pagination; `@odata.nextLink` preserves the expression. Metadata restrictions include `importance:low|normal|high` and `hasattachments:true|false`. Numeric-byte `size` comparisons and ISO-date `received` comparisons support `>`, `>=`, `<`, and `<=`. Emulator message size is the UTF-8 subject/body byte count plus attachment sizes, rather than a complete MIME wire size. Plain words combine as an implicit conjunction; quote a phrase to require adjacent words. Unknown properties, unsupported operators, or malformed structured expressions return a Graph `ErrorInvalidSearchQuery` response with HTTP 400. This is a focused mail search subset, not a complete KQL implementation.
+
 ## AWS
 
 S3, SQS, IAM, and STS emulation with AWS SDK-compatible S3 paths and query-style SQS/IAM/STS endpoints. All responses use AWS-compatible XML.

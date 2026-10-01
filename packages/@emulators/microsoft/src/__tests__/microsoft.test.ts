@@ -3,6 +3,7 @@ import { Hono } from "@emulators/core";
 import { Store, WebhookDispatcher, authMiddleware, type TokenMap } from "@emulators/core";
 import { microsoftPlugin, seedFromConfig, getMicrosoftStore } from "../index.js";
 import { decodeJwt } from "jose";
+import { createMessageRecord, upsertMessageAttachment } from "../helpers.js";
 
 const base = "http://localhost:4000";
 
@@ -541,6 +542,134 @@ describe("Microsoft plugin integration", () => {
   });
 
   // --- Microsoft Graph mail, calendar, and drive ---
+
+  it("searches Graph literals, phrases and fields before paginating both mail routes", async () => {
+    const accessToken = await getAccessToken(app);
+    const ms = getMicrosoftStore(store);
+    const subjects = ["Native scheduled attachment", "Native attachment scheduled", "Other subject"];
+    for (const subject of subjects) {
+      createMessageRecord(ms, {
+        user_email: "testuser@example.com",
+        subject,
+        body_content: subject === "Other subject" ? "Native scheduled attachment" : 'report & C# 50% "quoted"',
+        from: { address: "sender@example.com" },
+        to_recipients: [{ address: "recipient@example.com" }],
+        parent_folder_id: "sentitems",
+        web_link_base: base,
+      });
+    }
+    for (const route of ["/v1.0/me/messages", "/v1.0/me/mailFolders/sentitems/messages"]) {
+      const search = async (expression: string, top = 20) => {
+        const query = new URLSearchParams({ $search: JSON.stringify(expression), $top: String(top) });
+        const response = await app.request(`${base}${route}?${query}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        expect(response.status).toBe(200);
+        return (await response.json()) as { value: { subject: string }[]; "@odata.nextLink"?: string };
+      };
+      expect((await search('subject:"Native" AND subject:"scheduled"')).value.map((m) => m.subject)).toEqual(
+        subjects.slice(0, 2),
+      );
+      expect((await search('subject:"Native scheduled"')).value.map((m) => m.subject)).toEqual([subjects[0]]);
+      expect((await search('body:"Native scheduled attachment"')).value.map((m) => m.subject)).toEqual([subjects[2]]);
+      expect((await search('participants:"recipient@example.com" AND subject:"Native"')).value).toHaveLength(2);
+      expect((await search('body:"report & C# 50% \\"quoted\\""')).value).toHaveLength(2);
+      const first = await search('subject:"Native" AND subject:"scheduled"', 1);
+      expect(first.value).toHaveLength(1);
+      const next = await app.request(new URL(first["@odata.nextLink"]!, base).toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const second = (await next.json()) as { value: { subject: string }[]; "@odata.nextLink"?: string };
+      expect(second.value.map((m) => m.subject)).toEqual([subjects[1]]);
+      expect(second["@odata.nextLink"]).toBeUndefined();
+      expect((await search("Native scheduled attachment")).value.map((m) => m.subject)).toEqual([...subjects]);
+    }
+  });
+
+  it("evaluates legacy compiler exclusions, metadata and numeric/date ranges", async () => {
+    const accessToken = await getAccessToken(app);
+    const ms = getMicrosoftStore(store);
+    const report = createMessageRecord(ms, {
+      user_email: "testuser@example.com",
+      subject: "Legacy monthly report",
+      body_content: "report text",
+      importance: "high",
+      received_date_time: "2026-09-02T12:00:00Z",
+      parent_folder_id: "sentitems",
+      web_link_base: base,
+    });
+    upsertMessageAttachment(ms, {
+      user_email: report.user_email,
+      message_microsoft_id: report.microsoft_id,
+      name: "report.bin",
+      content_type: "application/octet-stream",
+      content_bytes: Buffer.alloc(2048).toString("base64"),
+    });
+    createMessageRecord(ms, {
+      user_email: "testuser@example.com",
+      subject: "Legacy newsletter",
+      body_content: "small",
+      importance: "low",
+      received_date_time: "2026-08-31T12:00:00Z",
+      parent_folder_id: "sentitems",
+      web_link_base: base,
+    });
+    for (const route of ["/v1.0/me/messages", "/v1.0/me/mailFolders/sentitems/messages"]) {
+      for (const expression of [
+        "Legacy NOT newsletter",
+        "size>=0 Legacy NOT newsletter",
+        'subject:"monthly report" importance:high',
+        "Legacy hasattachments:true",
+        "Legacy received>=2026-09-01 received<2026-09-03",
+        "Legacy size>1024 size<4096",
+        "Legacy NOT importance:low",
+        "Legacy AND NOT newsletter",
+        "Legacy (subject:report OR subject:missing) NOT newsletter",
+        "Legacy (subject:report OR subject:newsletter) NOT importance:low",
+        "Legacy NOT newsletter OR subject:missing",
+      ]) {
+        const query = new URLSearchParams({ $search: JSON.stringify(expression) });
+        const response = await app.request(`${base}${route}?${query}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        expect(response.status, expression).toBe(200);
+        expect(
+          ((await response.json()) as { value: { subject: string }[] }).value.map((m) => m.subject),
+          expression,
+        ).toEqual(["Legacy monthly report"]);
+      }
+    }
+  });
+
+  it.each([
+    'subject:"Native" AND',
+    'subject:"Native" OR',
+    'OR subject:"Native"',
+    "(subject:Native",
+    "subject:Native)",
+    "subject:Native OR ()",
+    'unsupported:"Native"',
+    "unsupported:Native",
+    "subject:",
+    "subject:(Native OR Other)",
+    "unsupported>5",
+    "size>5MB",
+    "size>no",
+    "received>=2026-02-30",
+    "NOT",
+    'subject:"Native" AND NOT',
+    '"unclosed',
+  ])("returns a Graph error for unsupported or malformed search %s", async (expression) => {
+    const accessToken = await getAccessToken(app);
+    for (const route of ["/v1.0/me/messages", "/v1.0/me/mailFolders/sentitems/messages"]) {
+      const query = new URLSearchParams({ $search: JSON.stringify(expression) });
+      const response = await app.request(`${base}${route}?${query}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe("ErrorInvalidSearchQuery");
+    }
+  });
 
   it("lists seeded messages and supports reply/send flows", async () => {
     const accessToken = await getAccessToken(app);

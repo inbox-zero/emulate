@@ -1014,41 +1014,234 @@ function evaluateMessageFilter(message: MicrosoftMessage, expression: string): b
   return true;
 }
 
+export class InvalidMessageSearchError extends Error {}
+
 export function searchMessages(
   messages: MicrosoftMessage[],
   searchExpression: string | null | undefined,
+  attachments: MicrosoftMessageAttachment[] = [],
 ): MicrosoftMessage[] {
   if (!searchExpression) return messages;
+  const expression = parseMessageSearch(searchExpression);
+  return messages.filter((message) => messageMatchesSearchExpression(message, expression, attachments));
+}
 
-  const raw = parseQuotedValue(searchExpression);
-  const [field, ...rest] = raw.split(":");
-  if (rest.length > 0 && field.toLowerCase() === "participants") {
-    const value = rest.join(":").toLowerCase();
-    return messages.filter((message) => {
-      const recipients = [
-        ...(message.from_address ? [message.from_address] : []),
-        ...message.to_recipients.map((recipient) => recipient.address),
-        ...message.cc_recipients.map((recipient) => recipient.address),
-      ];
-      return recipients.some((recipient) => recipient.toLowerCase().includes(value));
-    });
+type MessageSearchTerm = {
+  field?: string;
+  comparator?: string;
+  value: string;
+};
+
+type MessageSearchExpression =
+  | { kind: "term"; term: MessageSearchTerm }
+  | { kind: "not"; child: MessageSearchExpression }
+  | { kind: "all" | "any"; children: MessageSearchExpression[] };
+
+type MessageSearchToken = MessageSearchTerm | "AND" | "OR" | "NOT" | "(" | ")";
+
+function messageMatchesSearchExpression(
+  message: MicrosoftMessage,
+  expression: MessageSearchExpression,
+  attachments: MicrosoftMessageAttachment[],
+): boolean {
+  switch (expression.kind) {
+    case "term":
+      return messageMatchesSearchTerm(message, expression.term, attachments);
+    case "not":
+      return !messageMatchesSearchExpression(message, expression.child, attachments);
+    case "all":
+      return expression.children.every((child) => messageMatchesSearchExpression(message, child, attachments));
+    case "any":
+      return expression.children.some((child) => messageMatchesSearchExpression(message, child, attachments));
   }
+}
 
-  const text = raw.toLowerCase();
-  return messages.filter((message) =>
-    [
-      message.subject,
-      message.body_preview,
-      message.body_content,
-      message.from_address ?? "",
-      ...message.to_recipients.map((recipient) => recipient.address),
-      ...message.cc_recipients.map((recipient) => recipient.address),
-      message.internet_message_id,
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(text),
-  );
+function messageMatchesSearchTerm(
+  message: MicrosoftMessage,
+  term: MessageSearchTerm,
+  attachments: MicrosoftMessageAttachment[],
+): boolean {
+  const { field, comparator, value } = term;
+  if (field === "importance") return message.importance.toLowerCase() === value;
+  if (field === "hasattachments") return message.has_attachments === (value === "true");
+  if (field === "size" || field === "received") {
+    let actual: number;
+    if (field === "received") actual = Date.parse(message.received_date_time);
+    else
+      actual =
+        Buffer.byteLength(message.subject + message.body_content, "utf8") +
+        attachments
+          .filter(
+            (attachment) =>
+              attachment.message_microsoft_id === message.microsoft_id && attachment.user_email === message.user_email,
+          )
+          .reduce((total, attachment) => total + attachment.size, 0);
+    const expected = field === "received" ? Date.parse(value) : Number(value);
+    switch (comparator) {
+      case ">":
+        return actual > expected;
+      case ">=":
+        return actual >= expected;
+      case "<":
+        return actual < expected;
+      case "<=":
+        return actual <= expected;
+      default:
+        return false;
+    }
+  }
+  const participants = [
+    message.from_address ?? "",
+    ...message.to_recipients.map((recipient) => recipient.address),
+    ...message.cc_recipients.map((recipient) => recipient.address),
+    ...message.bcc_recipients.map((recipient) => recipient.address),
+  ];
+  let values: string[];
+  switch (field) {
+    case "subject":
+      values = [message.subject];
+      break;
+    case "body":
+      values = [message.body_preview, message.body_content];
+      break;
+    case "participants":
+      values = participants;
+      break;
+    case "from":
+      values = [message.from_address ?? ""];
+      break;
+    case "to":
+      values = message.to_recipients.map((recipient) => recipient.address);
+      break;
+    case "cc":
+      values = message.cc_recipients.map((recipient) => recipient.address);
+      break;
+    case "bcc":
+      values = message.bcc_recipients.map((recipient) => recipient.address);
+      break;
+    default:
+      values = [
+        message.subject,
+        message.body_preview,
+        message.body_content,
+        ...participants,
+        message.internet_message_id,
+      ];
+  }
+  return values.some((text) => text.toLowerCase().includes(value));
+}
+
+function parseMessageSearch(expression: string): MessageSearchExpression {
+  let raw = expression.trim();
+  if (raw.startsWith('"')) {
+    try {
+      raw = JSON.parse(raw).trim();
+    } catch {
+      throw new InvalidMessageSearchError("The search expression must be enclosed in one quoted string.");
+    }
+  }
+  const tokens: MessageSearchToken[] = [];
+  const token = /(?:([a-z]+)(>=|<=|>|<|:))?("(?:\\.|[^"\\])*"|[^\s"()]+)\s*/iy;
+  let offset = 0;
+  while (offset < raw.length) {
+    if (tokens.length >= 1024) throw new InvalidMessageSearchError("The mail search expression is too complex.");
+    if (/[\s]/.test(raw[offset]!)) {
+      offset++;
+      continue;
+    }
+    if (raw[offset] === "(" || raw[offset] === ")") {
+      tokens.push(raw[offset] as "(" | ")");
+      offset++;
+      continue;
+    }
+    token.lastIndex = offset;
+    const match = token.exec(raw);
+    if (!match) throw new InvalidMessageSearchError("Unsupported mail search syntax.");
+    offset = token.lastIndex;
+    let field: string | undefined = match[1]?.toLowerCase();
+    let comparator: string | undefined = match[2];
+    let literal = match[3]!;
+    if (field && ["http", "https", "ftp", "mailto", "file"].includes(field) && comparator === ":") {
+      literal = `${field}:${literal}`;
+      field = undefined;
+      comparator = undefined;
+    }
+    if (!field && (literal === "AND" || literal === "OR" || literal === "NOT")) {
+      tokens.push(literal);
+      continue;
+    }
+    let value = literal;
+    if (literal.startsWith('"')) {
+      try {
+        value = JSON.parse(literal);
+      } catch {
+        throw new InvalidMessageSearchError("Invalid quoted search literal.");
+      }
+    }
+    if (
+      !field &&
+      !literal.startsWith('"') &&
+      /^[a-z]+(?:>=|<=|>|<|:)/i.test(literal) &&
+      !/^(?:https?|ftp|mailto|file):/i.test(literal)
+    ) {
+      throw new InvalidMessageSearchError("A search property requires a valid value.");
+    }
+    value = value.toLowerCase();
+    validateMessageSearchTerm(field, comparator, value);
+    tokens.push({ field, comparator, value });
+  }
+  return parseMessageSearchTokens(tokens);
+}
+
+function parseMessageSearchTokens(tokens: MessageSearchToken[]): MessageSearchExpression {
+  let index = 0;
+  function parsePrimary(depth: number): MessageSearchExpression {
+    if (depth > 64) throw new InvalidMessageSearchError("The mail search expression is too deeply nested.");
+    const token = tokens[index++];
+    if (token === "NOT") return { kind: "not", child: parsePrimary(depth + 1) };
+    if (token === "(") {
+      const child = parseOr(depth + 1);
+      if (tokens[index++] !== ")") throw new InvalidMessageSearchError("Unbalanced search parentheses.");
+      return child;
+    }
+    if (!token || typeof token === "string") throw new InvalidMessageSearchError("A mail search term is required.");
+    return { kind: "term", term: token };
+  }
+  function parseAnd(depth: number): MessageSearchExpression {
+    const children = [parsePrimary(depth)];
+    while (index < tokens.length && tokens[index] !== "OR" && tokens[index] !== ")") {
+      if (tokens[index] === "AND") index++;
+      children.push(parsePrimary(depth));
+    }
+    return children.length === 1 ? children[0]! : { kind: "all", children };
+  }
+  function parseOr(depth: number): MessageSearchExpression {
+    const children = [parseAnd(depth)];
+    while (tokens[index] === "OR") {
+      index++;
+      children.push(parseAnd(depth));
+    }
+    return children.length === 1 ? children[0]! : { kind: "any", children };
+  }
+  const expression = parseOr(0);
+  if (index !== tokens.length) throw new InvalidMessageSearchError("Unexpected search operator or parenthesis.");
+  return expression;
+}
+
+function validateMessageSearchTerm(field: string | undefined, comparator: string | undefined, value: string): void {
+  if (!value) throw new InvalidMessageSearchError("A mail search term is required.");
+  if (!field) return;
+  if (["subject", "body", "participants", "from", "to", "cc", "bcc"].includes(field) && comparator === ":") return;
+  if (field === "importance" && comparator === ":" && ["low", "normal", "high"].includes(value)) return;
+  if (field === "hasattachments" && comparator === ":" && ["true", "false"].includes(value)) return;
+  if ([">", ">=", "<", "<="].includes(comparator ?? "")) {
+    if (field === "size" && /^\d+$/.test(value) && Number.isSafeInteger(Number(value))) return;
+    if (field === "received" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const date = new Date(`${value}T00:00:00Z`);
+      if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value) return;
+    }
+  }
+  throw new InvalidMessageSearchError("Unsupported mail search property, operator or value.");
 }
 
 export function sortMessages(
