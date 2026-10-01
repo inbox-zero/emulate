@@ -360,3 +360,7 @@ const client = new microsoftIssuer.Client({
   redirect_uris: ['http://localhost:3000/api/auth/callback/microsoft-entra-id'],
 })
 ```
+
+### Graph mail search
+
+`GET /v1.0/me/messages` and `GET /v1.0/me/mailFolders/{folderId}/messages` accept URL-encoded `$search` expressions enclosed in one outer quoted string. Search supports literal text, escaped quoted phrases, `AND`, and `subject:`, `body:`, `participants:`, `from:`, `to:`, `cc:`, and `bcc:` restrictions. For example, pass `JSON.stringify('subject:"monthly report" AND participants:"person@example.com"')` as the `$search` query parameter using `URLSearchParams`. Search runs before `$top`/`$skip` pagination; `@odata.nextLink` preserves the expression. Plain free-text search remains supported. Unsupported Boolean operators or malformed structured expressions return a Graph `ErrorInvalidSearchQuery` response with HTTP 400. This is a focused mail search subset, not a complete KQL implementation.

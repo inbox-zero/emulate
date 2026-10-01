@@ -1014,41 +1014,108 @@ function evaluateMessageFilter(message: MicrosoftMessage, expression: string): b
   return true;
 }
 
+export class InvalidMessageSearchError extends Error {}
+
 export function searchMessages(
   messages: MicrosoftMessage[],
   searchExpression: string | null | undefined,
 ): MicrosoftMessage[] {
   if (!searchExpression) return messages;
-
-  const raw = parseQuotedValue(searchExpression);
-  const [field, ...rest] = raw.split(":");
-  if (rest.length > 0 && field.toLowerCase() === "participants") {
-    const value = rest.join(":").toLowerCase();
-    return messages.filter((message) => {
-      const recipients = [
-        ...(message.from_address ? [message.from_address] : []),
+  const terms = parseMessageSearch(searchExpression);
+  return messages.filter((message) =>
+    terms.every(({ field, value }) => {
+      const participants = [
+        message.from_address ?? "",
         ...message.to_recipients.map((recipient) => recipient.address),
         ...message.cc_recipients.map((recipient) => recipient.address),
+        ...message.bcc_recipients.map((recipient) => recipient.address),
       ];
-      return recipients.some((recipient) => recipient.toLowerCase().includes(value));
-    });
-  }
-
-  const text = raw.toLowerCase();
-  return messages.filter((message) =>
-    [
-      message.subject,
-      message.body_preview,
-      message.body_content,
-      message.from_address ?? "",
-      ...message.to_recipients.map((recipient) => recipient.address),
-      ...message.cc_recipients.map((recipient) => recipient.address),
-      message.internet_message_id,
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(text),
+      let values: string[];
+      switch (field) {
+        case "subject":
+          values = [message.subject];
+          break;
+        case "body":
+          values = [message.body_preview, message.body_content];
+          break;
+        case "participants":
+          values = participants;
+          break;
+        case "from":
+          values = [message.from_address ?? ""];
+          break;
+        case "to":
+          values = message.to_recipients.map((recipient) => recipient.address);
+          break;
+        case "cc":
+          values = message.cc_recipients.map((recipient) => recipient.address);
+          break;
+        case "bcc":
+          values = message.bcc_recipients.map((recipient) => recipient.address);
+          break;
+        default:
+          values = [
+            message.subject,
+            message.body_preview,
+            message.body_content,
+            ...participants,
+            message.internet_message_id,
+          ];
+      }
+      return values.some((text) => text.toLowerCase().includes(value));
+    }),
   );
+}
+
+type MessageSearchTerm = { field?: string; value: string };
+
+function parseMessageSearch(expression: string): MessageSearchTerm[] {
+  let raw = expression.trim();
+  if (raw.startsWith('"')) {
+    try {
+      raw = JSON.parse(raw).trim();
+    } catch {
+      throw new InvalidMessageSearchError("The search expression must be enclosed in one quoted string.");
+    }
+  }
+  if (!raw.includes('"') && !/\bAND\b/.test(raw) && !/^(subject|body|participants|from|to|cc|bcc):/i.test(raw)) {
+    return [{ value: raw.toLowerCase() }];
+  }
+  const terms: MessageSearchTerm[] = [];
+  const token = /(?:([a-z]+):)?("(?:\\.|[^"\\])*"|[^\s"():]+)\s*/iy;
+  let offset = 0;
+  let needsTerm = true;
+  while (offset < raw.length) {
+    token.lastIndex = offset;
+    const match = token.exec(raw);
+    if (!match) throw new InvalidMessageSearchError("Unsupported mail search syntax.");
+    offset = token.lastIndex;
+    const field = match[1]?.toLowerCase();
+    const literal = match[2]!;
+    if (!field && literal === "AND") {
+      if (needsTerm) throw new InvalidMessageSearchError("AND requires a search term on each side.");
+      needsTerm = true;
+      continue;
+    }
+    if (!field && ["OR", "NOT"].includes(literal)) {
+      throw new InvalidMessageSearchError("Only AND combinations are supported by the mail search emulator.");
+    }
+    if (field && !["subject", "body", "participants", "from", "to", "cc", "bcc"].includes(field)) {
+      throw new InvalidMessageSearchError("Unsupported mail search property.");
+    }
+    let value = literal;
+    if (literal.startsWith('"')) {
+      try {
+        value = JSON.parse(literal);
+      } catch {
+        throw new InvalidMessageSearchError("Invalid quoted search literal.");
+      }
+    }
+    terms.push({ field, value: value.toLowerCase() });
+    needsTerm = false;
+  }
+  if (needsTerm || terms.length === 0) throw new InvalidMessageSearchError("A mail search term is required.");
+  return terms;
 }
 
 export function sortMessages(

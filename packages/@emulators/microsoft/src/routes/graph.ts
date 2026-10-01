@@ -1,4 +1,4 @@
-import type { RouteContext } from "@emulators/core";
+import type { Context, RouteContext } from "@emulators/core";
 import {
   createCalendarEventRecord,
   createCategoryRecord,
@@ -27,6 +27,7 @@ import {
   paginateResults,
   parsePositiveInt,
   searchMessages,
+  InvalidMessageSearchError,
   sortMessages,
   type UploadSessionRecord,
   updateMessage,
@@ -192,13 +193,13 @@ export function graphRoutes(ctx: RouteContext): void {
 
     const ms = getMicrosoftStore(ctx.store);
     const { top, skip } = getTopAndSkip(c);
-    const filtered = sortMessages(
-      searchMessages(
-        filterMessages(ms.messages.findBy("user_email", authEmail), c.req.query("$filter")),
-        c.req.query("$search"),
-      ),
-      c.req.query("$orderby"),
+    const searched = searchGraphMessages(
+      c,
+      filterMessages(ms.messages.findBy("user_email", authEmail), c.req.query("$filter")),
+      c.req.query("$search"),
     );
+    if (searched instanceof Response) return searched;
+    const filtered = sortMessages(searched, c.req.query("$orderby"));
     const { items, nextSkip } = paginateResults(filtered, top, skip);
 
     return c.json({
@@ -216,18 +217,18 @@ export function graphRoutes(ctx: RouteContext): void {
 
     const ms = getMicrosoftStore(ctx.store);
     const { top, skip } = getTopAndSkip(c);
-    const filtered = sortMessages(
-      searchMessages(
-        filterMessages(
-          ms.messages
-            .findBy("user_email", authEmail)
-            .filter((message) => message.parent_folder_id === folder.microsoft_id),
-          c.req.query("$filter"),
-        ),
-        c.req.query("$search"),
+    const searched = searchGraphMessages(
+      c,
+      filterMessages(
+        ms.messages
+          .findBy("user_email", authEmail)
+          .filter((message) => message.parent_folder_id === folder.microsoft_id),
+        c.req.query("$filter"),
       ),
-      c.req.query("$orderby"),
+      c.req.query("$search"),
     );
+    if (searched instanceof Response) return searched;
+    const filtered = sortMessages(searched, c.req.query("$orderby"));
     const { items, nextSkip } = paginateResults(filtered, top, skip);
 
     return c.json({
@@ -1550,4 +1551,17 @@ async function createDriveChild(ctx: RouteContext, c: any, authEmail: string, pa
   });
   const parent = parentId ? (ms.driveItems.findOneBy("microsoft_id", parentId) ?? null) : null;
   return c.json(formatDriveItemResource(created, parent), 201);
+}
+
+function searchGraphMessages(
+  c: Context,
+  ...args: Parameters<typeof searchMessages>
+): ReturnType<typeof searchMessages> | Response {
+  try {
+    return searchMessages(...args);
+  } catch (error) {
+    if (error instanceof InvalidMessageSearchError)
+      return microsoftGraphError(c, 400, "ErrorInvalidSearchQuery", error.message);
+    throw error;
+  }
 }
