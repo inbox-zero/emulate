@@ -1,7 +1,7 @@
 ---
 name: microsoft
 description: Emulated Microsoft Entra ID (Azure AD) OAuth 2.0 / OpenID Connect for local development and testing. Use when the user needs to test Microsoft sign-in locally, emulate Entra ID OIDC discovery, handle Microsoft token exchange, configure Azure AD OAuth clients, work with Microsoft Graph /me, or test PKCE/client credentials flows without hitting real Microsoft APIs. Triggers include "Microsoft OAuth", "Entra ID", "Azure AD", "emulate Microsoft", "mock Microsoft login", "test Microsoft sign-in", "Microsoft OIDC", "local Microsoft auth", or any task requiring a local Microsoft OAuth/OIDC provider.
-allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(emulate:*), Bash(curl:*)
+allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(curl:*)
 ---
 
 # Microsoft Entra ID Emulator
@@ -240,10 +240,11 @@ curl -X POST http://localhost:4005/oauth2/v2.0/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "refresh_token=r_microsoft_...&\
 client_id=example-client-id&\
+client_secret=example-client-secret&\
 grant_type=refresh_token"
 ```
 
-Returns a new `access_token`, rotated `refresh_token`, and new `id_token`.
+Returns a new `access_token`, rotated `refresh_token`, and new `id_token`. The presenting `client_id` and `client_secret` must belong to the client that received the refresh token. Legacy refresh records without a stored client binding remain supported.
 
 ### User Info
 
@@ -364,3 +365,7 @@ const client = new microsoftIssuer.Client({
 ### Graph mail search
 
 `GET /v1.0/me/messages` and `GET /v1.0/me/mailFolders/{folderId}/messages` accept URL-encoded `$search` expressions enclosed in one outer quoted string. Search supports literal text, escaped quoted phrases, implicit conjunction, `AND`, `OR`, unary `NOT`, parentheses, and `subject:`, `body:`, `participants:`, `from:`, `to:`, `cc:`, and `bcc:` restrictions. For example, pass `JSON.stringify('subject:"monthly report" AND participants:"person@example.com"')` as the `$search` query parameter using `URLSearchParams`. Search runs before `$top`/`$skip` pagination; `@odata.nextLink` preserves the expression. Metadata restrictions include `importance:low|normal|high` and `hasattachments:true|false`. Numeric-byte `size` comparisons and ISO-date `received` comparisons support `>`, `>=`, `<`, and `<=`. Emulator message size is the UTF-8 subject/body byte count plus attachment sizes, rather than a complete MIME wire size. Plain words combine as an implicit conjunction; quote a phrase to require adjacent words. Unknown properties, unsupported operators, or malformed structured expressions return a Graph `ErrorInvalidSearchQuery` response with HTTP 400. This is a focused mail search subset, not a complete KQL implementation.
+
+## Custom emulators alongside built-ins
+
+Use `npx @inbox-zero/emulate init --custom inventory` to scaffold a third-party API emulator and test. Register it in `emulate.config.ts` with `defineConfig` from `@inbox-zero/emulate`, alongside built-in entries such as `{ emulator: "microsoft" }`. Run `npx @inbox-zero/emulate start --watch` to reload imports and inspect custom state at the printed `/_emulate` URL. Successful reloads reset the run to seed. Existing flat seed configs still work; `--config` selects an explicit file. For authoring and testing third-party API emulators, see https://emulate.dev/docs/custom-emulators.

@@ -125,3 +125,7 @@ Open `GET /` in the Linear emulator to inspect issues, teams, users, projects, a
 ## Current Limits
 
 Full Linear schema coverage, exact production rate limiting, notification inbox behavior, rich document APIs, customer APIs, initiative APIs, exact search relevance, and full production agent behavior are not implemented.
+
+## Custom emulators alongside built-ins
+
+Use `npx @inbox-zero/emulate init --custom inventory` to scaffold a third-party API emulator and test. Register it in `emulate.config.ts` with `defineConfig` from `@inbox-zero/emulate`, alongside built-in entries such as `{ emulator: "linear" }`. Run `npx @inbox-zero/emulate start --watch` to reload imports and inspect custom state at the printed `/_emulate` URL. Successful reloads reset the run to seed. Existing flat seed configs still work; `--config` selects an explicit file. For authoring and testing third-party API emulators, see https://emulate.dev/docs/custom-emulators.

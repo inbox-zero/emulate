@@ -23,7 +23,7 @@ import { labelsAndMilestonesRoutes } from "./routes/labels.js";
 import { branchesAndGitRoutes } from "./routes/branches.js";
 import { contentsRoutes } from "./routes/contents.js";
 import { commitsRoutes } from "./routes/commits.js";
-import { orgsAndTeamsRoutes } from "./routes/orgs.js";
+import { getOrCreateMembersTeam, orgsAndTeamsRoutes } from "./routes/orgs.js";
 import { releasesRoutes } from "./routes/releases.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { searchRoutes } from "./routes/search.js";
@@ -57,6 +57,10 @@ export interface GitHubSeedConfig {
     name?: string;
     description?: string;
     email?: string;
+    members?: Array<{
+      login: string;
+      role?: "member" | "admin";
+    }>;
   }>;
   tokens?: Record<string, { login: string; scopes?: string[] }>;
   repos?: Array<{
@@ -345,6 +349,31 @@ export function seedFromConfig(store: Store, baseUrl: string, config: GitHubSeed
         billing_email: null,
       });
       gh.orgs.update(org.id, { node_id: generateNodeId("Org", org.id) });
+    }
+  }
+
+  if (config.orgs) {
+    for (const orgConfig of config.orgs) {
+      const org = gh.orgs.findOneBy("login", orgConfig.login);
+      if (!org) continue;
+
+      const membersTeam = getOrCreateMembersTeam(gh, org);
+      for (const memberConfig of orgConfig.members ?? []) {
+        const user = gh.users.findOneBy("login", memberConfig.login);
+        if (!user) continue;
+
+        const role: "member" | "maintainer" = memberConfig.role === "admin" ? "maintainer" : "member";
+        const existing = gh.teamMembers.findBy("team_id", membersTeam.id).find((member) => member.user_id === user.id);
+        if (existing) {
+          gh.teamMembers.update(existing.id, { role });
+        } else {
+          gh.teamMembers.insert({ team_id: membersTeam.id, user_id: user.id, role });
+        }
+      }
+
+      gh.teams.update(membersTeam.id, {
+        members_count: gh.teamMembers.findBy("team_id", membersTeam.id).length,
+      });
     }
   }
 

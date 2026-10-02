@@ -37,6 +37,66 @@ function isWorkflowPath(path: string): boolean {
   return path.startsWith(".github/workflows/");
 }
 
+const RAW_CONTENT_MEDIA_TYPES = new Set([
+  "application/vnd.github.raw",
+  "application/vnd.github.raw+json",
+  "application/vnd.github.v3.raw",
+  "application/vnd.github.v3.raw+json",
+]);
+
+function splitHeaderValue(value: string, delimiter: "," | ";"): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (quoted && char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && char === delimiter) {
+      parts.push(value.slice(start, i));
+      start = i + 1;
+    }
+  }
+
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function unquoteHeaderValue(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function acceptsRawContent(accept: string | undefined): boolean {
+  if (!accept) return false;
+
+  return splitHeaderValue(accept, ",").some((item) => {
+    const [mediaType, ...parameters] = splitHeaderValue(item, ";");
+    if (!RAW_CONTENT_MEDIA_TYPES.has(mediaType.trim().toLowerCase())) return false;
+
+    return !parameters.some((parameter) => {
+      const separator = parameter.indexOf("=");
+      if (separator === -1 || parameter.slice(0, separator).trim().toLowerCase() !== "q") return false;
+      return /^0(?:\.0*)?$/.test(unquoteHeaderValue(parameter.slice(separator + 1)));
+    });
+  });
+}
+
 type FileTreeEntry = { mode: string; type: "blob" | "commit"; sha: string; size?: number };
 
 function contentLinks(repo: GitHubRepo, baseUrl: string, path: string, ref: string, blobSha?: string) {
@@ -460,7 +520,18 @@ export function contentsRoutes({ app, store, webhooks, baseUrl }: RouteContext):
     }
     const entry = flat.blobs.get(path);
     if (entry) {
-      return c.json(formatFileContent(gh, repo, baseUrl, path, ref, entry, true, flat));
+      const content = formatFileContent(gh, repo, baseUrl, path, ref, entry, true, flat);
+      if (content.type === "file" && acceptsRawContent(c.req.header("Accept"))) {
+        const resolved = resolveSymlinkEntry(gh, repo.id, path, entry, flat);
+        const blob = findBlob(gh, repo.id, resolved?.sha ?? entry.sha);
+        if (!blob) throw notFoundResponse();
+        const bytes = blobBytes(blob);
+        return c.body(bytes, 200, {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(bytes.byteLength),
+        });
+      }
+      return c.json(content);
     }
     const prefix = `${path}/`;
     if (flat.dirs.has(path) || [...flat.blobs.keys()].some((p) => p.startsWith(prefix))) {
@@ -517,7 +588,19 @@ export function contentsRoutes({ app, store, webhooks, baseUrl }: RouteContext):
         .sort()[0];
     const readmePath = findReadme(".github") ?? findReadme("") ?? findReadme("docs");
     if (!readmePath) throw notFoundResponse();
-    return c.json(formatFileContent(gh, repo, baseUrl, readmePath, ref, flat.blobs.get(readmePath)!, true, flat));
+    const entry = flat.blobs.get(readmePath)!;
+    const content = formatFileContent(gh, repo, baseUrl, readmePath, ref, entry, true, flat);
+    if (content.type === "file" && acceptsRawContent(c.req.header("Accept"))) {
+      const resolved = resolveSymlinkEntry(gh, repo.id, readmePath, entry, flat);
+      const blob = findBlob(gh, repo.id, resolved?.sha ?? entry.sha);
+      if (!blob) throw notFoundResponse();
+      const bytes = blobBytes(blob);
+      return c.body(bytes, 200, {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(bytes.byteLength),
+      });
+    }
+    return c.json(content);
   });
 
   app.get("/repos/:owner/:repo/contents", (c) => getContents(c, ""));

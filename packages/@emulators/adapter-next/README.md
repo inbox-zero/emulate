@@ -44,7 +44,7 @@ export const emulator = createEmulateHandler({
   },
 })
 
-export const { GET, POST, PUT, PATCH, DELETE } = emulator
+export const { GET, POST, PUT, PATCH, DELETE, OPTIONS } = emulator
 ```
 
 GitHub App seeds may omit `private_key`. Read generated keys with the handler's server-only `generatedSecrets()` method. Explicit keys are excluded; persisted snapshots contain generated keys and require a private backend with atomic `initialize`.
@@ -105,7 +105,7 @@ const kvAdapter = {
   async save(data: string) { await kv.set('emulate-state', data) },
 }
 
-export const { GET, POST, PUT, PATCH, DELETE } = createEmulateHandler({
+export const { GET, POST, PUT, PATCH, DELETE, OPTIONS } = createEmulateHandler({
   services: { github: { emulator: github } },
   persistence: kvAdapter,
 })
@@ -124,3 +124,7 @@ persistence: filePersistence('.emulate/state.json'),
 
 - [Full documentation](https://emulate.dev)
 - [GitHub](https://github.com/vercel-labs/emulate)
+
+## Custom emulators
+
+Pass a definition created with `defineEmulator` from `emulate` to `services[name].emulator` in framework adapters. The same definition runs through the CLI and `createEmulator({ service: definition, listen: false })` in tests. Custom entries accept an optional inspector and persistence adapter. Export `OPTIONS` so preflight requests and custom OPTIONS routes reach the emulator. Root-relative redirects stay under the service mount, while custom HTML bodies pass through unchanged. Keep state inside the definition's state factory, and await the handler's `close()` in tests. See the [custom emulator guide](https://emulate.dev/docs/custom-emulators).

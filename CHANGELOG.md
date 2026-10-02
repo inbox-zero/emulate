@@ -1,14 +1,58 @@
 # Changelog
 
 <!-- release:start -->
+
+## 0.12.0
+
+### New Features
+
+- **Custom stateful HTTP APIs** let projects define typed emulators with seeds, reset, snapshots, and optional persistence, then reuse the same definitions in tests and Next.js or Nuxt adapters (#268)
+- **Custom API development workflow** adds `npx emulate init --custom inventory`, TypeScript and JavaScript configuration, watch mode, and request, route, and state inspection alongside built-in services (#268)
+
+### Improvements
+
+- **Microsoft mail search** supports literal and field-scoped queries, Boolean expressions, metadata predicates, and filtered continuation pages.
+- **Bundled distribution** preserves `@inbox-zero/emulate` and the Gmail mailbox profile endpoint used for snapshot-to-delta synchronization.
+- **Slack event signatures** use the configured `slack.signing_secret` to send Slack-compatible timestamp and signature headers (#266)
+- **Slack event envelopes** include the installation team, unique event ID, and event timestamp for routing and deduplication (#267)
+
+### Contributors
+
+- @ctate
+- @K-Mistele
+- @Railly
+
+<!-- release:end -->
+
+## 0.11.2
+
+### New Features
+
+- **GitHub raw media negotiation** adds Accept-based binary responses for Contents and README endpoints (#237)
+- **Google Calendar discovery** adds an unauthenticated Calendar v3 discovery document for local clients (#238)
+- **GitHub organization membership seeding** adds `orgs[].members` configuration with member and admin roles (#240)
+- **Resend idempotency keys** make email and batch sends replayable without duplicate records or webhooks (#239)
+
+### Improvements
+
+- **Slack message limits** enforce Slack's 40,000-character limit with safe truncation and warning metadata (#244)
+- **Google OIDC verification** issues RS256-signed ID tokens and exposes the matching JWKS endpoint (#247)
+- **Configuration examples and service docs** now reflect the current emulator registry and CLI options (#248)
+
+### Bug Fixes
+
+- Fixed **GitHub Checks** list endpoints for slash-containing branch and tag refs (#246)
+- Fixed **GitHub App installation writes** to authenticate as the App bot for organization installations (#242)
+- Fixed **AWS S3** uploads, copies, and downloads to preserve arbitrary binary payloads (#241, #245)
+- Fixed **Microsoft refresh tokens** to remain bound to the OAuth client that issued them (#243)
+
 ## 0.11.1
 
 ### Improvements
 
+- **Vercel v7 deployment listing** adds authenticated `GET /v7/deployments` with commit-SHA filtering across projects, team scoping, and pagination (#234)
 - Include upstream changes through 7cf250f: GitHub contents and commit APIs, installation-token inspection, persistent adapter state, secure generated-secret delivery, Linear priority labels, and Stripe webhook signatures.
 - Preserve the bundled `@inbox-zero/emulate` distribution and Gmail mailbox profile endpoint for snapshot-to-delta synchronization.
-
-<!-- release:end -->
 
 ## 0.11.0
 
@@ -41,12 +85,6 @@
 - @EfeDurmaz16
 - @Railly
 - @sidpalas
-
-## 0.9.1
-
-### Fixes
-
-- Add the Gmail mailbox profile endpoint with message and thread totals and a history cursor for snapshot-to-delta synchronization.
 
 ## 0.9.0
 

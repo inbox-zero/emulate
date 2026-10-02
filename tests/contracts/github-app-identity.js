@@ -217,12 +217,7 @@ export function githubAppIdentityContract(h) {
       const persistence = memory();
       const first = create(persistence);
       const privateKey = await key(first);
-      const mint = await h.request(
-        first,
-        "app/installations/124/access_tokens",
-        `Bearer ${jwt(privateKey)}`,
-        "POST",
-      );
+      const mint = await h.request(first, "app/installations/124/access_tokens", `Bearer ${jwt(privateKey)}`, "POST");
       expect(mint.status).toBe(201);
       const token = (await mint.json()).token;
 
@@ -244,16 +239,150 @@ export function githubAppIdentityContract(h) {
       );
       expect((await h.request(second, "repos/acme/private-repo", `Bearer ${token}`)).status).toBe(200);
     });
+    it("uses an organization installation bot for writes and enforces its scope and permissions", async () => {
+      const handler = create();
+      const privateKey = await key(handler);
+      const mint = await h.request(handler, "app/installations/124/access_tokens", `Bearer ${jwt(privateKey)}`, "POST");
+      expect(mint.status).toBe(201);
+      const token = (await mint.json()).token;
+
+      const write = await h.request(
+        handler,
+        "repos/acme/private-repo/issues",
+        `Bearer ${token}`,
+        "POST",
+        JSON.stringify({ title: "Created by the installation" }),
+      );
+      expect(write.status).toBe(201);
+      expect(await write.json()).toEqual(
+        expect.objectContaining({ user: expect.objectContaining({ login: "embedded[bot]", type: "Bot" }) }),
+      );
+
+      const draftRelease = await h.request(
+        handler,
+        "repos/acme/private-repo/releases",
+        `Bearer ${token}`,
+        "POST",
+        JSON.stringify({ tag_name: "v1.0.0", draft: true }),
+      );
+      expect(draftRelease.status).toBe(201);
+      const release = await draftRelease.json();
+      expect(release).toEqual(
+        expect.objectContaining({
+          author: expect.objectContaining({ login: "embedded[bot]", type: "Bot" }),
+          draft: true,
+        }),
+      );
+
+      const listedReleases = await h.request(handler, "repos/acme/private-repo/releases", `Bearer ${token}`);
+      expect(listedReleases.status).toBe(200);
+      expect(await listedReleases.json()).toEqual([expect.objectContaining({ id: release.id })]);
+
+      const fetchedRelease = await h.request(
+        handler,
+        `repos/acme/private-repo/releases/${release.id}`,
+        `Bearer ${token}`,
+      );
+      expect(fetchedRelease.status).toBe(200);
+
+      const updatePull = await h.request(
+        handler,
+        "repos/acme/private-repo/pulls",
+        `Bearer ${token}`,
+        "POST",
+        JSON.stringify({ title: "Update branch authorization", head: "update-feature", base: "main" }),
+      );
+      expect(updatePull.status).toBe(201);
+      const updatePullBody = await updatePull.json();
+
+      const pullRequestsOnlyMint = await h.request(
+        handler,
+        "app/installations/124/access_tokens",
+        `Bearer ${jwt(privateKey)}`,
+        "POST",
+        JSON.stringify({ permissions: { pull_requests: "write" } }),
+      );
+      expect(pullRequestsOnlyMint.status).toBe(201);
+      const pullRequestsOnlyToken = (await pullRequestsOnlyMint.json()).token;
+      const updateBranch = await h.request(
+        handler,
+        `repos/acme/private-repo/pulls/${updatePullBody.number}/update-branch`,
+        `Bearer ${pullRequestsOnlyToken}`,
+        "PUT",
+        JSON.stringify({}),
+      );
+      expect(updateBranch.status).toBe(403);
+
+      const mergePull = await h.request(
+        handler,
+        "repos/acme/private-repo/pulls",
+        `Bearer ${token}`,
+        "POST",
+        JSON.stringify({ title: "Contents-only merge authorization", head: "merge-feature", base: "main" }),
+      );
+      expect(mergePull.status).toBe(201);
+      const mergePullBody = await mergePull.json();
+
+      const contentsOnlyMint = await h.request(
+        handler,
+        "app/installations/124/access_tokens",
+        `Bearer ${jwt(privateKey)}`,
+        "POST",
+        JSON.stringify({ permissions: { contents: "write" } }),
+      );
+      expect(contentsOnlyMint.status).toBe(201);
+      const contentsOnlyToken = (await contentsOnlyMint.json()).token;
+      const merge = await h.request(
+        handler,
+        `repos/acme/private-repo/pulls/${mergePullBody.number}/merge`,
+        `Bearer ${contentsOnlyToken}`,
+        "PUT",
+        JSON.stringify({}),
+      );
+      expect(merge.status).toBe(200);
+      expect(await merge.json()).toEqual(expect.objectContaining({ merged: true }));
+
+      const outsideSelection = await h.request(
+        handler,
+        "repos/acme/other-repo/issues",
+        `Bearer ${token}`,
+        "POST",
+        JSON.stringify({ title: "Rejected outside the installation" }),
+      );
+      expect(outsideSelection.status).toBe(403);
+
+      const readOnlyMint = await h.request(
+        handler,
+        "app/installations/124/access_tokens",
+        `Bearer ${jwt(privateKey)}`,
+        "POST",
+        JSON.stringify({ permissions: { issues: "read", pull_requests: "read" } }),
+      );
+      expect(readOnlyMint.status).toBe(201);
+      const readOnlyToken = (await readOnlyMint.json()).token;
+      const insufficientPermission = await h.request(
+        handler,
+        "repos/acme/private-repo/issues",
+        `Bearer ${readOnlyToken}`,
+        "POST",
+        JSON.stringify({ title: "Rejected without write permission" }),
+      );
+      expect(insufficientPermission.status).toBe(403);
+
+      const insufficientPullRequestPermission = await h.request(
+        handler,
+        "repos/acme/private-repo/pulls",
+        `Bearer ${readOnlyToken}`,
+        "POST",
+        JSON.stringify({ title: "Rejected without pull request write permission", head: "feature", base: "main" }),
+      );
+      expect(insufficientPullRequestPermission.status).toBe(403);
+    });
     it("restores legacy installation authorization without fabricating inspection metadata", async () => {
       const persistence = memory();
       const first = create(persistence);
       const privateKey = await key(first);
-      const mint = await h.request(
-        first,
-        "app/installations/124/access_tokens",
-        `Bearer ${jwt(privateKey)}`,
-        "POST",
-      );
+      const mint = await h.request(first, "app/installations/124/access_tokens", `Bearer ${jwt(privateKey)}`, "POST");
       expect(mint.status).toBe(201);
       const token = (await mint.json()).token;
       await vi.waitFor(() => expect(persistence.read()).toContain("github.installation_token_metadata"));

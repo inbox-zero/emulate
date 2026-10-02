@@ -8,6 +8,8 @@ allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(curl:*)
 
 Fully stateful Slack Web API emulation with channels, messages, threads, reactions, user profiles, presence, modern file uploads, pins, bookmarks, views, OAuth v2, and incoming webhooks. Chat writes preserve common rich message fields such as `blocks`, `attachments`, `metadata`, formatting flags, unfurl flags, and client message ids. Conversation writes update archive state, names, topics, purposes, membership, DMs, MPIMs, and read cursors. User writes update profile fields, status, custom fields, and deterministic active or away presence. File writes support the current external upload flow with local upload URLs, file share messages, reads, lists, downloads, and deletes. Pin and bookmark writes support channel message pins and link bookmarks. View writes support App Home publishing and modal stacks. Seeded OAuth apps and OAuth installs create bot users and installation records. OAuth exchanges and explicit token seeds create scoped token records. State changes dispatch `event_callback` payloads to configured webhook URLs.
 
+Slack message text is limited to 40,000 Unicode characters across chat writes, incoming webhooks, and file upload initial comments. Longer text is truncated at a Unicode code point boundary before it is stored or dispatched. Successful Web API responses include `warning: "message_truncated"` and `response_metadata` with the matching warning and explanatory message. Rich fields such as `blocks` and `attachments` are preserved unchanged.
+
 ## Start
 
 ```bash
@@ -197,6 +199,8 @@ slack:
 ```
 
 When no OAuth apps are configured, the emulator accepts any `client_id`. With apps configured, strict validation is enforced for `client_id`, `client_secret`, and `redirect_uri`.
+
+`signing_secret` signs every outbound event subscription callback. Configure the receiving app with the same secret; signed callbacks include `X-Slack-Request-Timestamp` and `X-Slack-Signature`, with `X-Slack-Signature` set to `v0=<HMAC-SHA256(secret, "v0:<timestamp>:<raw-body>")>`. Verify against the unparsed request body. When the secret is absent or empty, callbacks are unsigned.
 
 ## API Endpoints
 
@@ -664,7 +668,9 @@ Open `GET /` in the Slack emulator to inspect conversations, messages, files, vi
 
 ## Event Dispatching
 
-When supported Slack writes mutate state, the emulator dispatches `event_callback` payloads to configured webhook URLs. These payloads match Slack's Events API format:
+For supported Slack writes that emit events, the emulator dispatches `event_callback` payloads to configured webhook URLs. These payloads match Slack's Events API format:
+
+Each callback includes outer `team_id`, `event_id`, and integer Unix-seconds `event_time` alongside the inner `event`. For authenticated Web API writes, `team_id` comes from the presented Slack token's installation. Development tokens without a stored Slack record fall back to the affected channel, user, or file's team, then the seeded workspace team (or `T000000001`). Incoming webhook posts use their webhook record's team, or the target channel's team when no record matches. Each logical event gets a distinct `event_id` shared by deliveries to multiple subscribers.
 
 - `message` events on `chat.postMessage`
 - `message` with `subtype: message_changed` on `chat.update`
@@ -683,6 +689,8 @@ When supported Slack writes mutate state, the emulator dispatches `event_callbac
 - `presence_change` on presence writes
 - `file_created`, `file_shared`, and `file_deleted` on file writes
 - `message` with `subtype: file_share` on shared file uploads
+
+When `slack.signing_secret` is configured, every existing outbound event subscription callback includes `X-Slack-Request-Timestamp` and `X-Slack-Signature`. The signature is `v0=<HMAC-SHA256(secret, "v0:<timestamp>:<raw-body>")>`, using the exact serialized callback body. Configure the receiver with the same secret and verify the unparsed request body. With an absent or empty secret, callbacks are unsigned.
 
 ## Current Limits
 
@@ -727,3 +735,7 @@ curl -X POST http://localhost:4003/services/T000000001/B000000001/X000000001 \
   -H "Content-Type: application/json" \
   -d '{"text": "Build passed on main"}'
 ```
+
+## Custom emulators alongside built-ins
+
+Use `npx @inbox-zero/emulate init --custom inventory` to scaffold a third-party API emulator and test. Register it in `emulate.config.ts` with `defineConfig` from `@inbox-zero/emulate`, alongside built-in entries such as `{ emulator: "slack" }`. Run `npx @inbox-zero/emulate start --watch` to reload imports and inspect custom state at the printed `/_emulate` URL. Successful reloads reset the run to seed. Existing flat seed configs still work; `--config` selects an explicit file. For authoring and testing third-party API emulators, see https://emulate.dev/docs/custom-emulators.

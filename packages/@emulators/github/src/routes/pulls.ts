@@ -1,8 +1,8 @@
-import type { RouteContext } from "@emulators/core";
+import type { AuthUser, RouteContext } from "@emulators/core";
 import { ApiError, parseJsonBody, parsePagination, setLinkHeader } from "@emulators/core";
 import { getGitHubStore } from "../store.js";
 import {
-  assertAuthenticatedUser,
+  assertAuthenticatedActor,
   assertRepoPermission,
   assertRepoWrite,
   notFoundResponse,
@@ -69,11 +69,26 @@ function createBranchAt(gh: GitHubStore, repo: GitHubRepo, branchName: string, s
   return b;
 }
 
+function findBranch(gh: GitHubStore, repo: GitHubRepo, branchName: string): GitHubBranch | undefined {
+  return gh.branches.findBy("repo_id", repo.id).find((b) => b.name === branchName);
+}
+
 function getOrCreateBranch(gh: GitHubStore, repo: GitHubRepo, branchName: string): GitHubBranch {
-  const existing = gh.branches.findBy("repo_id", repo.id).find((b) => b.name === branchName);
+  const existing = findBranch(gh, repo, branchName);
   if (existing) return existing;
   const tip = getDefaultBranchSha(gh, repo);
   return createBranchAt(gh, repo, branchName, tip);
+}
+
+function assertBranchCreationAllowed(
+  gh: GitHubStore,
+  authUser: AuthUser | undefined,
+  repo: GitHubRepo,
+  branchName: string,
+): void {
+  if (!findBranch(gh, repo, branchName)) {
+    assertRepoPermission(gh, authUser, repo, "contents", "write");
+  }
 }
 
 function updateBranchSha(gh: GitHubStore, repo: GitHubRepo, branchName: string, newSha: string) {
@@ -352,7 +367,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
 
-    const actor = assertRepoWrite(gh, c.get("authUser"), repo);
+    const actor = assertRepoWrite(gh, c.get("authUser"), repo, "pull_requests");
     const body = await parseJsonBody(c);
 
     const title = body.title;
@@ -374,6 +389,9 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const prBody = typeof body.body === "string" || body.body === null ? (body.body as string | null) : null;
     const draft = typeof body.draft === "boolean" ? body.draft : false;
 
+    const authUser = c.get("authUser");
+    assertBranchCreationAllowed(gh, authUser, headRepo, headRef);
+    assertBranchCreationAllowed(gh, authUser, repo, baseRef);
     const headBranch = getOrCreateBranch(gh, headRepo, headRef);
     const baseBranch = getOrCreateBranch(gh, repo, baseRef);
 
@@ -487,7 +505,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
 
-    const actor = assertRepoWrite(gh, c.get("authUser"), repo);
+    const actor = assertRepoWrite(gh, c.get("authUser"), repo, "pull_requests");
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
 
@@ -527,6 +545,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     }
     if (typeof body.base === "string" && body.base.trim()) {
       const newBase = body.base.trim();
+      assertBranchCreationAllowed(gh, c.get("authUser"), repo, newBase);
       const bb = getOrCreateBranch(gh, repo, newBase);
       patch.base_ref = newBase;
       patch.base_sha = bb.sha;
@@ -598,7 +617,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
 
-    const actor = assertRepoWrite(gh, c.get("authUser"), repo);
+    const actor = assertRepoWrite(gh, c.get("authUser"), repo, "contents");
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
 
@@ -788,7 +807,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
 
-    const actor = assertRepoWrite(gh, c.get("authUser"), repo);
+    const actor = assertRepoWrite(gh, c.get("authUser"), repo, "pull_requests");
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
 
@@ -846,7 +865,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
 
-    assertRepoWrite(gh, c.get("authUser"), repo);
+    assertRepoWrite(gh, c.get("authUser"), repo, "pull_requests");
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
 
@@ -885,7 +904,7 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
 
-    assertRepoWrite(gh, c.get("authUser"), repo);
+    assertRepoWrite(gh, c.get("authUser"), repo, "pull_requests");
     const pullNumber = parseInt(c.req.param("pull_number")!, 10);
     if (!Number.isFinite(pullNumber)) throw notFoundResponse();
 
@@ -904,11 +923,13 @@ export function pullsRoutes({ app, store, webhooks, baseUrl }: RouteContext): vo
     const baseRepo = gh.repos.get(pr.base_repo_id);
     if (!headRepo || !baseRepo) throw notFoundResponse();
 
+    assertRepoPermission(gh, c.get("authUser"), headRepo, "contents", "write");
+
     const headCommit = gh.commits.findBy("repo_id", headRepo.id).find((x) => x.sha === pr.head_sha);
     const baseCommit = gh.commits.findBy("repo_id", baseRepo.id).find((x) => x.sha === pr.base_sha);
     if (!headCommit || !baseCommit) throw new ApiError(422, "Could not resolve commits.");
 
-    const actor = assertAuthenticatedUser(gh, c.get("authUser"));
+    const actor = assertAuthenticatedActor(gh, c.get("authUser"));
     const mergeMsg = `Merge branch '${pr.base_ref}' into ${pr.head_ref}`;
     const newCommit = insertCommit(gh, headRepo, {
       treeSha: headCommit.tree_sha,

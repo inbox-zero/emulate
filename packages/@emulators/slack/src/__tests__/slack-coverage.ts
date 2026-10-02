@@ -25,7 +25,7 @@ export const slackCoverageMatrix: SlackCoverageEntry[] = [
     status: "partial",
     testedBy: ["slack.test.ts", "slack-sdk.test.ts", "slack-events.test.ts"],
     notes:
-      "Text, thread replies, blocks, attachments, metadata, formatting flags, unfurl flags, client message ids, and DM user id posting round trip. Full membership checks are future work.",
+      "Text is limited to 40,000 Unicode code points with Slack message_truncated warning metadata. Thread replies, blocks, attachments, metadata, formatting flags, unfurl flags, client message ids, and DM user id posting round trip. Full membership checks are future work.",
   },
   {
     family: "chat",
@@ -33,7 +33,8 @@ export const slackCoverageMatrix: SlackCoverageEntry[] = [
     route: "POST /api/chat.update",
     status: "partial",
     testedBy: ["slack.test.ts", "slack-sdk.test.ts", "slack-events.test.ts"],
-    notes: "Stored text and rich message fields are updated and message_changed events are dispatched.",
+    notes:
+      "Stored text is limited to 40,000 Unicode code points with Slack message_truncated warning metadata. Rich message fields are updated and message_changed events are dispatched.",
   },
   {
     family: "chat",
@@ -57,7 +58,8 @@ export const slackCoverageMatrix: SlackCoverageEntry[] = [
     route: "POST /api/chat.postEphemeral",
     status: "partial",
     testedBy: ["slack.test.ts", "slack-sdk.test.ts"],
-    notes: "Stores ephemeral messages outside channel history and validates target channel membership.",
+    notes:
+      "Stores ephemeral messages outside channel history, truncates text at 40,000 Unicode code points with Slack warning metadata, and validates target channel membership.",
   },
   {
     family: "chat",
@@ -65,7 +67,8 @@ export const slackCoverageMatrix: SlackCoverageEntry[] = [
     route: "POST /api/chat.scheduleMessage",
     status: "partial",
     testedBy: ["slack.test.ts", "slack-sdk.test.ts"],
-    notes: "Stores pending scheduled messages with rich payload fields and validates post_at bounds.",
+    notes:
+      "Stores pending messages with text limited to 40,000 Unicode code points and warning metadata, preserves rich payload fields, and validates post_at bounds.",
   },
   {
     family: "chat",
@@ -466,7 +469,8 @@ export const slackCoverageMatrix: SlackCoverageEntry[] = [
     route: "POST /services/:teamId/:botId/:token",
     status: "partial",
     testedBy: ["slack.test.ts", "slack-events.test.ts"],
-    notes: "Posts text and rich webhook messages with blocks, attachments, and common formatting fields preserved.",
+    notes:
+      "Posts text limited to 40,000 Unicode code points and rich webhook messages with blocks, attachments, and common formatting fields preserved.",
   },
   {
     family: "inspector",
@@ -491,7 +495,8 @@ export const slackCoverageMatrix: SlackCoverageEntry[] = [
     route: "POST /api/files.completeUploadExternal",
     status: "partial",
     testedBy: ["slack.test.ts", "slack-sdk.test.ts", "slack-events.test.ts"],
-    notes: "Completes uploaded bytes into file records, optional file_share messages, and file events.",
+    notes:
+      "Completes uploaded bytes into file records, truncates initial comments at 40,000 Unicode code points with Slack warning metadata, and emits optional file_share messages and file events.",
   },
   {
     family: "files",
