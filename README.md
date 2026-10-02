@@ -1,5 +1,12 @@
 # emulate
 
+<p>
+  <a href="https://vercel.com/labs#active-experiments"><img alt="Vercel Labs Experiment" src="https://img.shields.io/badge/LABS-EXPERIMENT-0a0a0a.svg?style=for-the-badge&amp;logo=Vercel&amp;labelColor=000000" height="28"></a>
+  <a href="https://www.npmjs.com/package/emulate"><img alt="npm version: emulate" src="https://img.shields.io/npm/v/emulate.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
+  <a href="https://github.com/vercel-labs/emulate/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/vercel-labs/emulate.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
+  <a href="https://www.npmjs.com/package/emulate"><img alt="npm downloads per month: emulate" src="https://img.shields.io/npm/dm/emulate.svg?style=for-the-badge&amp;labelColor=000000&amp;label=npm%20downloads" height="28"></a>
+</p>
+
 Local drop-in replacement services for CI and no-network sandboxes. Fully stateful, production-fidelity API emulation. Not mocks.
 
 ## Quick Start
@@ -26,6 +33,59 @@ All services start with sensible defaults. No config file needed:
 - **Twilio** on `http://localhost:4013`
 
 Stripe webhooks configured with a secret include a `Stripe-Signature` header signed over the timestamp and raw request body.
+
+Slack event callbacks use `X-Slack-Request-Timestamp` and `X-Slack-Signature` when `slack.signing_secret` is configured. The signature is an HMAC-SHA256 over `v0:<timestamp>:<raw-body>`; configure the receiver with the same secret and verify against the unparsed request body. Existing event subscriptions remain unsigned when the secret is absent or empty.
+
+Resend `POST /emails` and `POST /emails/batch` support 24-hour `Idempotency-Key` replay, returning the original email IDs without duplicate emails or webhooks.
+
+## Custom emulators
+
+Build and share emulators for the third-party HTTP APIs your app uses. Define a provider's behavior in TypeScript, run it alongside built-in services, and reuse it in tests and framework adapters. emulate provides seeds, resets, persistence, and request/state inspection.
+
+Start from a working scaffold and adapt its routes and state to your provider:
+
+```bash
+npm install -D @inbox-zero/emulate
+npx @inbox-zero/emulate init --custom inventory
+npx @inbox-zero/emulate start --watch
+```
+
+The scaffold implements reservations, stock changes, cancellation, and out-of-stock errors. It creates a runnable Node test and adds the service to a discovered YAML, JSON, TypeScript, or JavaScript config. For an unusual executable config, it prints the import and service entry to add manually. `init` prints the test command and directs you to the service URL and Inspector link printed by `start`; the port depends on the config. Watch mode retries when a missing local import is created, including outside the config directory. Use the inspector to view requests and state or reset to the initial seed. Structured inspection redacts token and secret fields such as `access_token`, `refresh_token`, and `client_secret`.
+
+```typescript
+import { defineEmulator, createEmulator } from '@inbox-zero/emulate'
+
+const acme = defineEmulator({
+  name: 'acme',
+  state: () => ({ anvils: 100 }),
+  setup({ app, state }) {
+    app.get('/inventory', (c) => c.json(state))
+    app.post('/orders', (c) => {
+      if (!state.anvils) return c.json({ error: 'sold_out' }, 409)
+      state.anvils -= 1
+      return c.json({ shipped: 'anvil', to: 'coyote' }, 201)
+    })
+  },
+})
+
+const api = await createEmulator({ service: acme, listen: false })
+try {
+  await api.request('/orders', { method: 'POST' })
+  const checkpoint = api.snapshot()
+  await api.reset()
+  await api.restore(checkpoint)
+} finally {
+  await api.close()
+}
+```
+
+Use `defineConfig({ services: { acme: { emulator: acme }, github: { emulator: 'github' } } })` in `emulate.config.ts`. YAML/JSON entries accept local module paths and installed packages. `--config` selects a config explicitly; legacy flat configs and `--seed` remain supported. Node loads local TypeScript with path aliases and source locations without additional runtime dependencies. Node 26 supports erasable TypeScript only; compile enums and parameter properties to JavaScript before loading them. Node 24 also supports native TypeScript transforms.
+
+Custom state uses your own record shapes and IDs. Seeds replace the complete initial state. Reset restores the captured seed; successful watch reloads create a new baseline and reset the run. With config auto-discovery, watch mode also detects recognized config files created after startup. Instances are independent. Persistence is opt-in, with versioned snapshots and no cross-process locking. Use `port: 0` for HTTP tests, or `listen: false` to test without opening a port. Custom reset and close are awaitable. Framework adapters keep root-relative custom redirects under the service mount while preserving custom HTML bodies.
+
+Streamed responses persist state changes when their bodies finish or are canceled. Reset and close cancel active streams before running cleanup. `c.header('Set-Cookie', value, { append: true })` retains cookies already set on the response. In a Next.js route, export `OPTIONS` from `createEmulateHandler` to forward preflight requests and custom OPTIONS handlers.
+
+See the [custom emulator guide](https://emulate.dev/docs/custom-emulators) and [complete inventory example](examples/custom-api) for validation, middleware, persistence, adapters, package sharing, and troubleshooting.
 
 ## CLI
 
@@ -110,7 +170,7 @@ github:
 ## Programmatic API
 
 ```bash
-npm install emulate
+npm install @inbox-zero/emulate
 ```
 
 Each call to `createEmulator` starts a single service:
@@ -233,6 +293,9 @@ github:
   orgs:
     - login: my-org
       name: My Organization
+      members:
+        - login: octocat
+          role: admin
   repos:
     - owner: octocat
       name: hello-world
@@ -406,9 +469,13 @@ linear:
     - name: Bug
       color: "#d92d20"
       team: ENG
+    - name: Feature
+      color: "#2563eb"
+      team: ENG
   issues:
     - team: ENG
       title: Fix local checkout test
+      description: Reproduce and fix the checkout failure.
       state: Todo
       assignee: dev@example.com
       labels: [Bug]
@@ -419,6 +486,7 @@ linear:
       redirect_uris:
         - http://localhost:3000/api/auth/callback/linear
       scopes: [read, write, issues:create, comments:create]
+      actor: user
   tokens:
     - token: lin_test_admin
       user: admin@example.com
@@ -464,7 +532,111 @@ aws:
     roles:
       - role_name: lambda-execution-role
         description: Role for Lambda function execution
+
+okta:
+  users:
+    - login: testuser@okta.local
+      email: testuser@okta.local
+      first_name: Test
+      last_name: User
+  groups:
+    - name: Everyone
+      description: All users
+      type: BUILT_IN
+      okta_id: 00g_everyone
+  authorization_servers:
+    - id: default
+      name: default
+      audiences: [api://default]
+  oauth_clients:
+    - client_id: okta-test-client
+      client_secret: okta-test-secret
+      name: Sample OIDC Client
+      redirect_uris:
+        - http://localhost:3000/callback
+      auth_server_id: default
+
+resend:
+  domains:
+    - name: example.com
+      region: us-east-1
+  contacts:
+    - email: test@example.com
+      first_name: Test
+      last_name: User
+
+stripe:
+  customers:
+    - email: test@example.com
+      name: Test Customer
+  products:
+    - name: Pro Plan
+      description: Monthly pro subscription
+  prices:
+    - product_name: Pro Plan
+      currency: usd
+      unit_amount: 2000
+
+mongoatlas:
+  projects:
+    - name: Project0
+  clusters:
+    - name: Cluster0
+      project: Project0
+  database_users:
+    - username: admin
+      project: Project0
+  databases:
+    - cluster: Cluster0
+      name: test
+      collections: [items]
+
+clerk:
+  users:
+    - first_name: Test
+      last_name: User
+      email_addresses: [test@example.com]
+      password: clerk_test_password
+  organizations:
+    - name: My Company
+      slug: my-company
+      members:
+        - email: test@example.com
+          role: admin
+  oauth_applications:
+    - client_id: clerk_emulate_client
+      client_secret: clerk_emulate_secret
+      name: Emulate App
+      redirect_uris:
+        - http://localhost:3000/api/auth/callback/clerk
+
+twilio:
+  account:
+    sid: AC00000000000000000000000000000000
+    auth_token: twilio_test_auth_token
+    friendly_name: Local Twilio Account
+  api_keys:
+    - sid: SK00000000000000000000000000000000
+      secret: twilio_test_api_secret
+      friendly_name: Local API Key
+  phone_numbers:
+    - phone_number: "+15551234567"
+      friendly_name: Local SMS and Voice Number
+      sms_url: http://localhost:3000/api/twilio/sms
+      voice_url: http://localhost:3000/api/twilio/voice
+  messaging_services:
+    - friendly_name: Local Messaging Service
+      phone_numbers: ["+15551234567"]
+  verify_services:
+    - friendly_name: Local Verify Service
+      code: "123456"
+      default_channel: sms
+  conversations:
+    services:
+      - friendly_name: Local Conversations
 ```
+
+GitHub organization `members` are optional. Each entry references a seeded user by `login`; `role` defaults to `member`, while `admin` creates an organization administrator. Unknown users are ignored. Seeded memberships use the synthetic `members` team and grant private organization repository access.
 
 ## OAuth & Integrations
 
@@ -506,10 +678,6 @@ github:
     - app_id: 12345
       slug: "my-github-app"
       name: "My GitHub App"
-      private_key: |
-        -----BEGIN RSA PRIVATE KEY-----
-        ...your PEM key...
-        -----END RSA PRIVATE KEY-----
       permissions:
         contents: read
         issues: write
@@ -522,7 +690,9 @@ github:
           repository_selection: all
 ```
 
-JWT authentication: sign a JWT with `{ iss: "<app_id>" }` using the app's private key (RS256). The emulator verifies the signature and resolves the app.
+JWT authentication: sign a JWT with `{ iss: "<app_id>" }` using the app's private key (RS256). The emulator verifies the signature and resolves the app. For programmatic `createEmulator` calls, omit `private_key` and read the generated RSA key from `generatedSecrets`. The CLI generates an omitted key only when `--generated-secrets-file <path>` is provided; otherwise it requires an explicit, valid private key. Do not replace the omitted field with a fake PEM placeholder.
+
+Installation access tokens act as the configured GitHub App bot for repository writes. Repository ownership, selected repository access, and requested App permissions remain enforced. Pull request merges require `contents: write` on the base repository. Pull request branch updates require `pull_requests: write` on the pull request repository and `contents: write` on the head repository.
 
 Inspect secret-free metadata for minted installation tokens at `GET /_emulate/installation-tokens`.
 
@@ -534,6 +704,7 @@ Inspect secret-free metadata for minted installation tokens at `GET /_emulate/in
 
 ```yaml
 slack:
+  signing_secret: "my_signing_secret"
   oauth_apps:
     - client_id: "12345.67890"
       client_secret: "example_client_secret"
@@ -541,6 +712,8 @@ slack:
       redirect_uris:
         - "http://localhost:3000/api/auth/callback/slack"
 ```
+
+The signing secret applies to every outbound Slack event subscription callback. Each signed callback includes `X-Slack-Request-Timestamp` and `X-Slack-Signature`, calculated as `v0=<HMAC-SHA256(secret, "v0:<timestamp>:<raw-body>")>`. Configure the receiver with the same secret and verify the unparsed request body. If the secret is absent or empty, callbacks are unsigned.
 
 ### Linear OAuth Apps
 
@@ -607,6 +780,7 @@ Every endpoint below is fully stateful with Vercel-style JSON responses and curs
 - `POST /v13/deployments` - create deployment (auto-transitions to READY)
 - `GET /v13/deployments/:idOrUrl` - get deployment (by ID or URL)
 - `GET /v6/deployments` - list deployments (filter by project, target, state)
+- `GET /v7/deployments` - list deployments (filter by project, target, state, commit SHA)
 - `DELETE /v13/deployments/:id` - delete deployment (cascades)
 - `PATCH /v12/deployments/:id/cancel` - cancel building deployment
 - `GET /v2/deployments/:id/aliases` - list deployment aliases
@@ -681,7 +855,8 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 ### Contents & Commit History
 - `GET /repos/:owner/:repo/readme` - get the repository README
 - `GET /repos/:owner/:repo/contents/:path` - get a file or list a directory at a ref
-- `GET /:owner/:repo/raw/:ref/:path` - download file content from advertised raw URLs
+- Send `Accept: application/vnd.github.raw` or `application/vnd.github.raw+json` to file Contents and README requests to receive raw bytes; directory and submodule responses remain JSON
+- `GET /:owner/:repo/raw/:ref/:path` - download file content from advertised raw URLs; this is separate from Accept negotiation
 - `PUT/DELETE /repos/:owner/:repo/contents/:path` - create, update, or delete a file and commit the change
 - `GET /repos/:owner/:repo/commits` - list commits with ref, path, author, and date filters
 - `GET /repos/:owner/:repo/commits/:ref` - get a commit with file diffs and stats
@@ -765,8 +940,8 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 - Secrets: repo + org CRUD
 
 ### Checks
-- Check runs: create, update, get, annotations, rerequest, list by ref/suite
-- Check suites: create, get, preferences, rerequest, list by ref
+- Check runs: create, update, get, annotations, rerequest, list by ref/suite. Ref based lookups accept branch and tag refs containing slashes.
+- Check suites: create, get, preferences, rerequest, list by ref. Ref based lookups accept branch and tag refs containing slashes.
 - Automatic suite status rollup from check run results
 
 ### Misc
@@ -781,11 +956,13 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 
 OAuth 2.0, OpenID Connect, and mutable Google Workspace-style surfaces for local inbox, calendar, and drive flows.
 
+Google ID tokens are RS256-signed JWTs. The discovery document advertises RS256, and `/oauth2/v3/certs` returns the matching RSA public key used to verify issued tokens.
+
 - `GET /o/oauth2/v2/auth` - authorization endpoint
 - `POST /oauth2/token` - token exchange
 - `GET /oauth2/v2/userinfo` - get user info
 - `GET /.well-known/openid-configuration` - OIDC discovery document
-- `GET /oauth2/v3/certs` - JSON Web Key Set (JWKS)
+- `GET /oauth2/v3/certs` - JSON Web Key Set (JWKS) with the RSA public key for ID token verification
 - `GET /gmail/v1/users/:userId/profile` - mailbox email address, message and thread totals, and current history ID
 - `GET /gmail/v1/users/:userId/messages` - list messages with `q`, `labelIds`, `maxResults`, and `pageToken`
 - `GET /gmail/v1/users/:userId/messages/:id` - fetch a Gmail-style message payload in `full`, `metadata`, `minimal`, or `raw` formats
@@ -803,12 +980,17 @@ OAuth 2.0, OpenID Connect, and mutable Google Workspace-style surfaces for local
 - `GET /gmail/v1/users/:userId/history`, `POST /gmail/v1/users/:userId/watch`, `POST /gmail/v1/users/:userId/stop`
 - `GET /gmail/v1/users/:userId/settings/filters`, `POST /gmail/v1/users/:userId/settings/filters`, `DELETE /gmail/v1/users/:userId/settings/filters/:id`
 - `GET /gmail/v1/users/:userId/settings/forwardingAddresses`, `GET /gmail/v1/users/:userId/settings/sendAs`
+- `GET /discovery/v1/apis/calendar/v3/rest` — public Calendar v3 REST discovery document
 - `GET /calendar/v3/users/:userId/calendarList`, `GET /calendar/v3/calendars/:calendarId/events`, `POST /calendar/v3/calendars/:calendarId/events`, `DELETE /calendar/v3/calendars/:calendarId/events/:eventId`, `POST /calendar/v3/freeBusy`
 - `GET /drive/v3/files`, `GET /drive/v3/files/:fileId`, `POST /drive/v3/files`, `PATCH /drive/v3/files/:fileId`, `PUT /drive/v3/files/:fileId`, `POST /upload/drive/v3/files`
 
 ## Slack API
 
 Fully stateful Slack Web API emulation with channels, messages, threads, reactions, user profiles, presence, modern file uploads, pins, bookmarks, views, OAuth v2, and incoming webhooks. Chat writes preserve common rich message fields such as `blocks`, `attachments`, `metadata`, formatting flags, unfurl flags, and client message ids. Conversation writes update archive state, names, topics, purposes, membership, DMs, MPIMs, and read cursors. User writes update profile fields, status, custom fields, and deterministic active or away presence. File writes support the current external upload flow with local upload URLs, file share messages, reads, lists, downloads, and deletes. Pin and bookmark writes support channel message pins and link bookmarks. View writes support App Home publishing and modal stacks. Seeded OAuth apps and OAuth installs create bot users and installation records. OAuth exchanges and explicit token seeds create scoped token records. Supported write state changes dispatch Slack `event_callback` payloads to configured webhook URLs.
+
+Set `slack.signing_secret` in seed config to sign every outbound event subscription callback. The emulator sends `X-Slack-Request-Timestamp` and `X-Slack-Signature`, where the signature is `v0=<HMAC-SHA256(secret, "v0:<timestamp>:<raw-body>")>`. Configure the receiver with the same secret and verify the unparsed request body. Without a secret, callbacks are unsigned.
+
+Slack message text is limited to 40,000 Unicode characters across chat writes, incoming webhooks, and file upload initial comments. Longer text is truncated at a Unicode code point boundary before it is stored or dispatched. Successful Web API responses include `warning: "message_truncated"` and `response_metadata` with the matching warning and explanatory message. Rich fields such as `blocks` and `attachments` are preserved unchanged.
 
 ### Auth & Chat
 - `POST /api/auth.test` - test authentication
@@ -886,6 +1068,8 @@ Modal opens and pushes require values from `/api/views.generateTriggerId`. Pass 
 
 ### Inspector
 - `GET /` - tabbed local inspector for conversations, messages, files, views, auth records, incoming webhooks, event subscriptions, and event deliveries
+
+When a supported Slack write emits an `event_callback`, the payload contains the inner `event` plus outer `team_id`, `event_id`, and `event_time`. The team comes from the presented Slack token's installation; development tokens without a stored Slack record fall back to the affected channel, user, or file's team, then the seeded workspace team (or `T000000001`). Incoming webhook posts use their webhook record's team, or the target channel's team when no record matches. `event_time` is an integer Unix timestamp in seconds. Each logical event gets a new `event_id`, shared across deliveries to multiple subscribers.
 
 Slack scope checks are relaxed by default so local tests can use simple bearer tokens. Set `slack.strict_scopes: true` in seed config to make supported Web API methods return Slack-style `missing_scope` errors with `needed` and `provided` fields. Strict mode checks `chat:write`, `channels:read`, `channels:history`, `channels:join`, `channels:manage`, `channels:write`, `groups:read`, `groups:history`, `groups:write`, `im:read`, `im:history`, `im:write`, `mpim:read`, `mpim:history`, `mpim:write`, `users:read`, `users:read.email`, `users.profile:read`, `users.profile:write`, `users:write`, `files:read`, `files:write`, `pins:read`, `pins:write`, `bookmarks:read`, `bookmarks:write`, `reactions:read`, `reactions:write`, and `team:read`. Slack lists no method-specific scopes for `views.publish`, `views.open`, `views.update`, or `views.push`, so the emulator requires auth but does not add strict-scope checks for those methods.
 
@@ -991,7 +1175,7 @@ Sign in with Apple emulation with authorization code flow, PKCE support, RS256 I
 
 ## Microsoft Entra ID
 
-Microsoft Entra ID (Azure AD) v2.0 OAuth 2.0 and OpenID Connect emulation with authorization code flow, PKCE, client credentials, RS256 ID tokens, and OIDC discovery.
+Microsoft Entra ID (Azure AD) v2.0 OAuth 2.0 and OpenID Connect emulation with authorization code flow, PKCE, client credentials, client-bound refresh tokens, RS256 ID tokens, and OIDC discovery.
 
 - `GET /.well-known/openid-configuration` - OIDC discovery document
 - `GET /:tenant/v2.0/.well-known/openid-configuration` - tenant-scoped OIDC discovery
@@ -1003,13 +1187,24 @@ Microsoft Entra ID (Azure AD) v2.0 OAuth 2.0 and OpenID Connect emulation with a
 - `GET /oauth2/v2.0/logout` - end session / logout
 - `POST /oauth2/v2.0/revoke` - token revocation
 
+Refresh token requests must include the `client_id` and `client_secret` of the client that received the token. Refresh tokens rotate after successful use. Legacy refresh records without a stored client binding remain supported.
+
+```bash
+curl -X POST http://localhost:4005/oauth2/v2.0/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "refresh_token=r_microsoft_...&\
+client_id=example-client-id&\
+client_secret=example-client-secret&\
+grant_type=refresh_token"
+```
+
 ### Graph mail search
 
 `GET /v1.0/me/messages` and `GET /v1.0/me/mailFolders/{folderId}/messages` accept URL-encoded `$search` expressions enclosed in one outer quoted string. Search supports literal text, escaped quoted phrases, implicit conjunction, `AND`, `OR`, unary `NOT`, parentheses, and `subject:`, `body:`, `participants:`, `from:`, `to:`, `cc:`, and `bcc:` restrictions. For example, pass `JSON.stringify('subject:"monthly report" AND participants:"person@example.com"')` as the `$search` query parameter using `URLSearchParams`. Search runs before `$top`/`$skip` pagination; `@odata.nextLink` preserves the expression. Metadata restrictions include `importance:low|normal|high` and `hasattachments:true|false`. Numeric-byte `size` comparisons and ISO-date `received` comparisons support `>`, `>=`, `<`, and `<=`. Emulator message size is the UTF-8 subject/body byte count plus attachment sizes, rather than a complete MIME wire size. Plain words combine as an implicit conjunction; quote a phrase to require adjacent words. Unknown properties, unsupported operators, or malformed structured expressions return a Graph `ErrorInvalidSearchQuery` response with HTTP 400. This is a focused mail search subset, not a complete KQL implementation.
 
 ## AWS
 
-S3, SQS, IAM, and STS emulation with AWS SDK-compatible S3 paths and query-style SQS/IAM/STS endpoints. All responses use AWS-compatible XML.
+S3, SQS, IAM, and STS emulation with AWS SDK-compatible S3 paths and query-style SQS/IAM/STS endpoints. S3 uploads and downloads preserve arbitrary binary payloads, including raw byte lengths and ETags. All responses use AWS-compatible XML.
 
 ### S3
 
@@ -1275,6 +1470,10 @@ apps/
 
 The core provides a generic `Store` with typed `Collection<T>` instances supporting CRUD, indexing, filtering, and pagination. Each service plugin registers its routes with the shared internal app and uses the store for state.
 
+## Acknowledgments
+
+The internal HTTP layer builds on [Hono](https://hono.dev)'s API and design. Thank you to Yusuke Wada and the Hono contributors for their work. Hono's copyright and MIT license notice are included in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and distributed with the npm packages.
+
 ## Auth
 
 Tokens are configured in the seed config and map to users. Pass them as `Authorization: Bearer <token>` or `Authorization: token <token>`.
@@ -1283,7 +1482,7 @@ Tokens are configured in the seed config and map to users. Pass them as `Authori
 
 **GitHub**: Public repo endpoints work without auth. Private repos and write operations require a valid token. Pagination uses `page`/`per_page` with `Link` headers.
 
-**Google**: Standard OAuth 2.0 authorization code flow. Configure clients in the seed config.
+**Google**: Standard OAuth 2.0 authorization code flow with RS256-signed OIDC ID tokens. The discovery document advertises RS256 and `/oauth2/v3/certs` returns the RSA public key used to verify issued tokens. Configure clients in the seed config.
 
 **Slack**: All Web API endpoints require `Authorization: Bearer <token>`. Seeded OAuth apps create local installation records, and OAuth v2 flow with user picker UI creates scoped bot tokens. Optional strict scope mode returns `missing_scope` when a token lacks a required method scope.
 

@@ -19,6 +19,10 @@ npm install @emulators/resend
 - `GET /emails/:id` — get email
 - `POST /emails/:id/cancel` — cancel scheduled email
 
+### Idempotency
+
+`POST /emails` and `POST /emails/batch` accept the case-insensitive `Idempotency-Key` header. Keys must be 1 to 256 characters and are retained for 24 hours. Repeating a request with the same key and validated payload returns the original response without creating another email or dispatching duplicate webhooks. Reusing a key with a different payload or endpoint returns `409 invalid_idempotent_request`. Invalid key lengths return `400 invalid_idempotency_key`. Requests without the header keep the normal non-idempotent behavior.
+
 ### Domains
 - `POST /domains` — create domain
 - `GET /domains` — list domains

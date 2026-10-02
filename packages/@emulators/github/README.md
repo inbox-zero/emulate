@@ -42,7 +42,8 @@ npm install @emulators/github
 ### Contents & Commit History
 - `GET /repos/:owner/:repo/readme` — get the repository README
 - `GET /repos/:owner/:repo/contents/:path` — get a file or list a directory at a ref
-- `GET /:owner/:repo/raw/:ref/:path` — download file content from advertised raw URLs
+- Send `Accept: application/vnd.github.raw` or `application/vnd.github.raw+json` to file Contents and README requests to receive raw bytes; directory and submodule responses remain JSON
+- `GET /:owner/:repo/raw/:ref/:path` — download file content from advertised raw URLs; this is separate from Accept negotiation
 - `PUT/DELETE /repos/:owner/:repo/contents/:path` — create, update, or delete a file and commit the change
 - `GET /repos/:owner/:repo/commits` — list commits with ref, path, author, and date filters
 - `GET /repos/:owner/:repo/commits/:ref` — get a commit with file diffs and stats
@@ -126,8 +127,8 @@ npm install @emulators/github
 - Secrets: repo + org CRUD
 
 ### Checks
-- Check runs: create, update, get, annotations, rerequest, list by ref/suite
-- Check suites: create, get, preferences, rerequest, list by ref
+- Check runs: create, update, get, annotations, rerequest, list by ref/suite. Ref based lookups accept branch and tag refs containing slashes.
+- Check suites: create, get, preferences, rerequest, list by ref. Ref based lookups accept branch and tag refs containing slashes.
 - Automatic suite status rollup from check run results
 
 ### Misc
@@ -143,6 +144,8 @@ npm install @emulators/github
 
 Public repo endpoints work without auth. Private repos and write operations require a valid token. Pagination uses `page`/`per_page` with `Link` headers.
 
+Installation access tokens act as the configured GitHub App bot for repository writes. Repository ownership, selected repository access, and requested App permissions remain enforced. Pull request merges require `contents: write` on the base repository. Pull request branch updates require `pull_requests: write` on the pull request repository and `contents: write` on the head repository.
+
 ## Seed Configuration
 
 ```yaml
@@ -154,6 +157,9 @@ github:
   orgs:
     - login: my-org
       name: My Organization
+      members:
+        - login: octocat
+          role: admin
   repos:
     - owner: octocat
       name: hello-world
@@ -182,6 +188,8 @@ github:
           account: my-org
           repository_selection: all
 ```
+
+Organization `members` are optional. Each entry references a seeded user by `login`; `role` defaults to `member`, while `admin` creates an organization administrator. Unknown users are ignored. Memberships are backed by the synthetic `members` team, so they also appear through team membership endpoints and grant access to private organization repositories.
 
 The `private_key` field is required when calling `seedFromConfig` directly. To generate omitted keys before seeding, use `materializeGitHubSeedConfig` and retain the returned key material:
 

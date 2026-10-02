@@ -125,3 +125,7 @@ If the mount path cannot be detected from the URL, pass `routePrefix`:
 ```typescript
 export default defineEventHandler(createEmulateHandler(config, { routePrefix: '/api/emulate' }))
 ```
+
+## Custom emulators
+
+Pass a definition created with `defineEmulator` from `emulate` to `services[name].emulator` in framework adapters. The same definition runs through the CLI and `createEmulator({ service: definition, listen: false })` in tests. Custom entries accept an optional inspector and persistence adapter. Root-relative redirects stay under the service mount, while custom HTML bodies pass through unchanged. Keep state inside the definition's state factory, and await the handler's `close()` in tests. See the [custom emulator guide](https://emulate.dev/docs/custom-emulators).

@@ -13,6 +13,22 @@ import type {
 
 export type SlackScopeRequirement = string | string[];
 
+export const SLACK_MESSAGE_TEXT_LIMIT = 40_000;
+export const SLACK_MESSAGE_TRUNCATED_WARNING = "message_truncated";
+
+const SLACK_MESSAGE_TRUNCATED_MESSAGE = "[WARN] Your message was truncated but still posted";
+
+export interface SlackResponseMetadata {
+  warnings: string[];
+  messages: string[];
+}
+
+export interface SlackMessageTextResult {
+  text: string;
+  warning?: typeof SLACK_MESSAGE_TRUNCATED_WARNING;
+  responseMetadata?: SlackResponseMetadata;
+}
+
 let tsCounter = 0;
 
 export type SlackRichMessageFieldName =
@@ -61,6 +77,28 @@ export function slackOk<T extends Record<string, unknown>>(c: Context, data: T) 
 
 export function slackError(c: Context, error: string, status: ContentfulStatusCode = 200) {
   return c.json({ ok: false, error }, status);
+}
+
+export function normalizeSlackMessageText(text: string): SlackMessageTextResult {
+  const characters = Array.from(text);
+  if (characters.length <= SLACK_MESSAGE_TEXT_LIMIT) return { text };
+
+  return {
+    text: characters.slice(0, SLACK_MESSAGE_TEXT_LIMIT).join(""),
+    warning: SLACK_MESSAGE_TRUNCATED_WARNING,
+    responseMetadata: {
+      warnings: [SLACK_MESSAGE_TRUNCATED_WARNING],
+      messages: [SLACK_MESSAGE_TRUNCATED_MESSAGE],
+    },
+  };
+}
+
+export function slackMessageTextResponseMetadata(result: SlackMessageTextResult | undefined) {
+  if (!result?.warning || !result.responseMetadata) return {};
+  return {
+    warning: result.warning,
+    response_metadata: result.responseMetadata,
+  };
 }
 
 export function isSlackStrictScopes(store: Store): boolean {

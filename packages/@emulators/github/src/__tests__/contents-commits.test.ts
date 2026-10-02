@@ -125,6 +125,18 @@ async function putFile(app: Hono, path: string, text: string, extra: Record<stri
   });
 }
 
+async function putFileBytes(app: Hono, path: string, bytes: Buffer, extra: Record<string, unknown> = {}) {
+  return app.request(`${base}/repos/octocat/hello-world/contents/${path}`, {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      message: `Update ${path}`,
+      content: bytes.toString("base64"),
+      ...extra,
+    }),
+  });
+}
+
 async function issueInstallationToken(app: Hono, installationId: number, requestBody?: Record<string, unknown>) {
   const response = await app.request(`${base}/app/installations/${installationId}/access_tokens`, {
     method: "POST",
@@ -205,6 +217,49 @@ describe("GitHub contents routes", () => {
     expect(body.name).toBe("README.md");
   });
 
+  it("negotiates raw file bytes for Contents and README requests", async () => {
+    const binary = Buffer.from([0, 1, 2, 127, 128, 254, 255]);
+    expect((await putFileBytes(app, "docs/My%20File%20%231.bin", binary)).status).toBe(201);
+
+    const rawAccepts = [
+      "application/vnd.github.raw",
+      "application/vnd.github.raw+json",
+      'Application/Vnd.GitHub.Raw+Json; format="raw"; Q="0.8"',
+      'text/plain, application/vnd.github.raw+json; profile="contents"; q="0.8"',
+    ];
+    for (const accept of rawAccepts) {
+      const response = await app.request(
+        `${base}/repos/octocat/hello-world/contents/docs/My%20File%20%231.bin?ref=main`,
+        { headers: { ...authHeaders(), Accept: accept } },
+      );
+      expect(response.status, accept).toBe(200);
+      expect(response.headers.get("content-type"), accept).toBe("application/octet-stream");
+      expect(response.headers.get("content-length"), accept).toBe(String(binary.byteLength));
+      expect(Buffer.from(await response.arrayBuffer()), accept).toEqual(binary);
+    }
+
+    const readme = await app.request(`${base}/repos/octocat/hello-world/readme?ref=main`, {
+      headers: { ...authHeaders(), Accept: "application/vnd.github.raw+json; q=1" },
+    });
+    expect(readme.status).toBe(200);
+    expect(await readme.text()).toBe("# hello-world\n");
+    expect(readme.headers.get("content-type")).toBe("application/octet-stream");
+
+    for (const accept of [
+      undefined,
+      "application/json",
+      "application/vnd.github.html+json",
+      'application/vnd.github.raw+json; q="0"',
+    ]) {
+      const response = await app.request(`${base}/repos/octocat/hello-world/contents/README.md`, {
+        headers: { ...authHeaders(), ...(accept ? { Accept: accept } : {}) },
+      });
+      expect(response.status, accept).toBe(200);
+      expect(response.headers.get("content-type"), accept).toContain("application/json");
+      expect((await response.json()) as { type: string }, accept).toEqual(expect.objectContaining({ type: "file" }));
+    }
+  });
+
   it("selects READMEs from .github, root, then docs", async () => {
     const docs = await putFile(app, "docs/README.md", "docs\n");
     const docsBody = (await docs.json()) as { content: { sha: string } };
@@ -213,6 +268,10 @@ describe("GitHub contents routes", () => {
 
     const preferred = await app.request(`${base}/repos/octocat/hello-world/readme`, { headers: authHeaders() });
     expect(((await preferred.json()) as { path: string }).path).toBe(".github/README.md");
+    const preferredRaw = await app.request(`${base}/repos/octocat/hello-world/readme`, {
+      headers: { ...authHeaders(), Accept: "application/vnd.github.raw+json" },
+    });
+    expect(await preferredRaw.text()).toBe("github\n");
 
     const deleteDotGitHub = await app.request(`${base}/repos/octocat/hello-world/contents/.github/README.md`, {
       method: "DELETE",
@@ -259,6 +318,12 @@ describe("GitHub contents routes", () => {
     const dirBody = (await dir.json()) as Array<{ path: string; type: string }>;
     expect(dirBody).toHaveLength(1);
     expect(dirBody[0].path).toBe("src/index.ts");
+
+    const rawDir = await app.request(`${base}/repos/octocat/hello-world/contents/src`, {
+      headers: { ...authHeaders(), Accept: "application/vnd.github.raw" },
+    });
+    expect(rawDir.status).toBe(200);
+    expect(Array.isArray(await rawDir.json())).toBe(true);
   });
 
   it("reuses blob and untouched subtree identities", async () => {
@@ -638,6 +703,22 @@ describe("GitHub contents routes", () => {
       expect((await app.request(url, { headers: authHeaders(noContents.token) })).status, url).toBe(403);
       expect((await app.request(url, { headers: authHeaders(readContents.token) })).status, url).toBe(200);
     }
+
+    const negotiatedContents = `${base}/repos/octocat/hello-world/contents/README.md`;
+    const deniedRaw = await app.request(negotiatedContents, {
+      headers: { ...authHeaders(noContents.token), Accept: "application/vnd.github.raw+json" },
+    });
+    expect(deniedRaw.status).toBe(403);
+    const allowedRaw = await app.request(negotiatedContents, {
+      headers: { ...authHeaders(readContents.token), Accept: "application/vnd.github.raw+json" },
+    });
+    expect(allowedRaw.status).toBe(200);
+    expect(await allowedRaw.text()).toBe("# hello-world\n");
+
+    const deniedReadmeRaw = await app.request(`${base}/repos/octocat/hello-world/readme`, {
+      headers: { ...authHeaders(noContents.token), Accept: "application/vnd.github.raw" },
+    });
+    expect(deniedReadmeRaw.status).toBe(403);
 
     const searches = [
       `${base}/search/code?q=${encodeURIComponent("hello-world repo:octocat/hello-world")}`,
@@ -1240,6 +1321,11 @@ describe("GitHub contents routes", () => {
     const rawLink = await app.request(`${base}/octocat/hello-world/raw/main/link.txt`, { headers: authHeaders() });
     expect(rawLink.status).toBe(200);
     expect(await rawLink.text()).toBe("target\n");
+    const negotiatedLink = await app.request(`${base}/repos/octocat/hello-world/contents/link.txt`, {
+      headers: { ...authHeaders(), Accept: "application/vnd.github.raw+json" },
+    });
+    expect(negotiatedLink.status).toBe(200);
+    expect(await negotiatedLink.text()).toBe("target\n");
 
     const broken = await app.request(`${base}/repos/octocat/hello-world/contents/broken-link`, {
       headers: authHeaders(),
@@ -1263,6 +1349,11 @@ describe("GitHub contents routes", () => {
         html_url: `${base}/acme/dependency/tree/${submoduleSha}`,
       }),
     );
+    const negotiatedSubmodule = await app.request(`${base}/repos/octocat/hello-world/contents/vendor/mod`, {
+      headers: { ...authHeaders(), Accept: "application/vnd.github.raw" },
+    });
+    expect(negotiatedSubmodule.status).toBe(200);
+    expect(await negotiatedSubmodule.json()).toEqual(expect.objectContaining({ type: "submodule" }));
     const listing = await app.request(`${base}/repos/octocat/hello-world/contents/vendor`, {
       headers: authHeaders(),
     });

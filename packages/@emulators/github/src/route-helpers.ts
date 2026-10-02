@@ -300,14 +300,27 @@ export function assertBranchUpdateAllowed(
 }
 
 export function assertRepoAdmin(gh: GitHubStore, authUser: AuthUser | undefined, repo: GitHubRepo): GitHubUser {
-  if (!authUser) throw unauthorized();
-  const user = getActorUser(gh, authUser);
-  if (!user) throw unauthorized();
+  if (authUser?.installation) {
+    assertRepoPermission(gh, authUser, repo, "administration", "write");
+    return assertAuthenticatedActor(gh, authUser);
+  }
+
+  const user = assertAuthenticatedUser(gh, authUser);
   if (hasRepoAdmin(gh, user, repo)) return user;
   throw forbidden();
 }
 
-export function assertRepoWrite(gh: GitHubStore, authUser: AuthUser | undefined, repo: GitHubRepo): GitHubUser {
+export function assertRepoWrite(
+  gh: GitHubStore,
+  authUser: AuthUser | undefined,
+  repo: GitHubRepo,
+  permissions: string | string[],
+): GitHubUser {
+  if (authUser?.installation) {
+    assertRepoPermission(gh, authUser, repo, permissions, "write");
+    return assertAuthenticatedActor(gh, authUser);
+  }
+
   const user = assertAuthenticatedUser(gh, authUser);
   if (!repo.private) return user;
   if (!canAccessRepo(gh, authUser, repo)) throw forbidden();
@@ -315,8 +328,6 @@ export function assertRepoWrite(gh: GitHubStore, authUser: AuthUser | undefined,
 }
 
 export function assertIssueWrite(gh: GitHubStore, authUser: AuthUser | undefined, repo: GitHubRepo): GitHubUser {
-  const user = assertAuthenticatedUser(gh, authUser);
-  if (!repo.private) return user;
-  if (!canAccessRepo(gh, authUser, repo)) throw forbidden();
-  return user;
+  assertRepoPermission(gh, authUser, repo, "issues", "write");
+  return assertAuthenticatedActor(gh, authUser);
 }

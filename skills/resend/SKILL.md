@@ -1,7 +1,7 @@
 ---
 name: resend
 description: Emulated Resend email API for local development and testing. Use when the user needs to send emails locally, test transactional email flows, implement magic link or verification code auth, inspect sent emails, manage domains/contacts/API keys, or work with the Resend API without sending real emails. Triggers include "Resend API", "emulate Resend", "send email locally", "test email", "magic link", "verification email", "email inbox", "RESEND_BASE_URL", or any task requiring a local email API.
-allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(emulate:*), Bash(curl:*)
+allowed-tools: Bash(npx @inbox-zero/emulate:*), Bash(curl:*)
 ---
 
 # Resend Email API Emulator
@@ -202,6 +202,18 @@ curl -X POST http://localhost:4000/emails/<id>/cancel \
 
 Supported fields: `from`, `to`, `subject`, `html`, `text`, `cc`, `bcc`, `reply_to`, `headers`, `tags`, `scheduled_at`.
 
+### Idempotent Sends
+
+`POST /emails` and `POST /emails/batch` accept the case-insensitive `Idempotency-Key` header. Keys must be 1 to 256 characters and remain active for 24 hours. A retry with the same key and validated payload returns the original response, email IDs, and status without creating emails or dispatching duplicate `email.sent` and `email.delivered` webhooks. Reusing a key with a different payload or endpoint returns `409 invalid_idempotent_request`; invalid key lengths return `400 invalid_idempotency_key`. Omitting the header preserves normal behavior.
+
+```bash
+curl -X POST http://localhost:4000/emails \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: signup-email-123" \
+  -d '{"from": "hello@example.com", "to": "user@example.com", "subject": "Hello"}'
+```
+
 ### Domains
 
 ```bash
@@ -337,3 +349,7 @@ const res = await fetch(`${emu.url}/emails`, {
 const { data: emails } = await res.json()
 console.log(emails[0].html) // contains "123456"
 ```
+
+## Custom emulators alongside built-ins
+
+Use `npx @inbox-zero/emulate init --custom inventory` to scaffold a third-party API emulator and test. Register it in `emulate.config.ts` with `defineConfig` from `@inbox-zero/emulate`, alongside built-in entries such as `{ emulator: "resend" }`. Run `npx @inbox-zero/emulate start --watch` to reload imports and inspect custom state at the printed `/_emulate` URL. Successful reloads reset the run to seed. Existing flat seed configs still work; `--config` selects an explicit file. For authoring and testing third-party API emulators, see https://emulate.dev/docs/custom-emulators.

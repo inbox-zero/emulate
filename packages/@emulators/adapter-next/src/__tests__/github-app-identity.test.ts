@@ -9,14 +9,25 @@ function config(persistence?: TestPersistence, privateKey?: string): EmulateHand
         seed: {
           users: [{ login: "octocat" }],
           orgs: [{ login: "acme" }],
-          repos: [{ owner: "acme", name: "private-repo", private: true }],
+          repos: [
+            { owner: "acme", name: "private-repo", private: true },
+            { owner: "acme", name: "other-repo", private: true },
+          ],
           apps: [
             {
               app_id: 123,
               slug: "embedded",
               name: "Embedded",
               private_key: privateKey,
-              installations: [{ installation_id: 124, account: "acme" }],
+              permissions: { contents: "write", issues: "write", pull_requests: "write" },
+              installations: [
+                {
+                  installation_id: 124,
+                  account: "acme",
+                  repository_selection: "selected",
+                  repositories: ["acme/private-repo"],
+                },
+              ],
             },
           ],
         },
@@ -41,11 +52,17 @@ githubAppIdentityContract<EmulateHandlerConfig, ReturnType<typeof createEmulateH
       { params: Promise.resolve({ path: ["github", "app"] }) },
     );
   },
-  request(handler, path, authorization, method = "GET") {
+  request(handler, path, authorization, method = "GET", body) {
+    const headers = authorization
+      ? { Authorization: authorization, ...(body ? { "Content-Type": "application/json" } : {}) }
+      : body
+        ? { "Content-Type": "application/json" }
+        : undefined;
     return handler[method](
       new Request(`http://localhost/emulate/github/${path}`, {
         method,
-        headers: authorization ? { Authorization: authorization } : undefined,
+        headers,
+        body,
       }),
       { params: Promise.resolve({ path: ["github", ...path.split("/")] }) },
     );
