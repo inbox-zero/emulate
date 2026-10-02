@@ -37,6 +37,20 @@ afterEach(async () => {
 });
 
 describe("custom configuration and scaffold", () => {
+  it("shares the scoped package API between independently loaded workspace graphs", async () => {
+    const dir = await project();
+    const entry = join(dir, "shared-api.ts");
+    await writeFile(entry, 'import { defineConfig } from "@inbox-zero/emulate"; export default defineConfig;');
+    const first = new ProjectLoader(dir);
+    const second = new ProjectLoader(dir);
+    try {
+      expect(await first.load(entry)).toBe(await second.load(entry));
+    } finally {
+      first.close();
+      second.close();
+    }
+  });
+
   it("isolates simultaneous module graphs and keeps source metadata with erasable TypeScript", async () => {
     const dir = await project();
     const entry = join(dir, "entry.ts");
