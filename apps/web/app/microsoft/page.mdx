@@ -40,5 +40,7 @@ microsoft:
 ## Notes
 
 - The message and drive APIs are scoped to the local seeded user and support mutable state during a test run.
-- Upload sessions are supported for large Outlook draft attachments.
+- Upload sessions are supported for large Outlook draft attachments, including inline attachments, cancellation, and a `Location` header on completion.
+- `/v1.0/me/mailFolders/{folderId}/messages/delta` returns delta links on the `https://graph.microsoft.com` host; route them back to the emulator. `$deltatoken=expired` returns HTTP 410 `SyncStateNotFound`.
+- Messages carry `inferenceClassification` and `flag.flagStatus`, both seedable (`inference_classification`, `flag_status`), patchable, and filterable.
 - The emulator intentionally implements the practical Microsoft Graph subset used by local app flows rather than the entire Graph surface.

@@ -1,5 +1,9 @@
 import type { Entity } from "@emulators/core";
 
+export type MicrosoftInferenceClassification = "focused" | "other";
+
+export type MicrosoftFlagStatus = "notFlagged" | "flagged" | "complete";
+
 export interface MicrosoftUser extends Entity {
   /** Object ID (oid) — unique per-tenant user identifier */
   oid: string;
@@ -69,6 +73,8 @@ export interface MicrosoftMessage extends Entity {
   last_modified_date_time: string;
   is_draft: boolean;
   is_read: boolean;
+  inference_classification: MicrosoftInferenceClassification | null;
+  flag_status: MicrosoftFlagStatus;
   importance: "low" | "normal" | "high";
   categories: string[];
   parent_folder_id: string;

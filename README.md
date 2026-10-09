@@ -250,6 +250,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
 |--------|---------|-------------|
 | `service` | *(required)* | Service name: `'vercel'`, `'github'`, `'google'`, `'slack'`, `'apple'`, `'microsoft'`, `'okta'`, `'aws'`, `'resend'`, `'stripe'`, `'mongoatlas'`, `'clerk'`, `'linear'`, or `'twilio'` |
 | `port` | `4000` | Port for the HTTP server |
+| `hostname` | all interfaces | Interface the HTTP server binds to, such as `'127.0.0.1'` for loopback only |
 | `seed` | none | Inline seed data (same shape as YAML config) |
 | `baseUrl` | none | Override advertised base URL. Per-service `baseUrl` in seed config takes highest priority, then this option, then `EMULATE_BASE_URL` env var (supports `{service}`), then `PORTLESS_URL` (supports `{service}`, automatically set by the `portless` CLI wrapper), then `http://localhost:<port>`. |
 
@@ -973,7 +974,8 @@ Google ID tokens are RS256-signed JWTs. The discovery document advertises RS256,
 - `POST /gmail/v1/users/:userId/messages/:id/modify` - add/remove labels on one message
 - `POST /gmail/v1/users/:userId/messages/batchModify` - add/remove labels across many messages
 - `POST /gmail/v1/users/:userId/messages/:id/trash` and `POST /gmail/v1/users/:userId/messages/:id/untrash`
-- `GET /gmail/v1/users/:userId/drafts`, `POST /gmail/v1/users/:userId/drafts`, `GET /gmail/v1/users/:userId/drafts/:id`, `PUT /gmail/v1/users/:userId/drafts/:id`, `POST /gmail/v1/users/:userId/drafts/:id/send`, `DELETE /gmail/v1/users/:userId/drafts/:id`
+- `GET /gmail/v1/users/:userId/drafts`, `POST /gmail/v1/users/:userId/drafts`, `GET /gmail/v1/users/:userId/drafts/:id`, `PUT /gmail/v1/users/:userId/drafts/:id`, `POST /gmail/v1/users/:userId/drafts/send`, `DELETE /gmail/v1/users/:userId/drafts/:id`
+- `POST /upload/gmail/v1/users/:userId/drafts`, `PUT /upload/gmail/v1/users/:userId/drafts/:id`, `POST /upload/gmail/v1/users/:userId/drafts/send` - media and resumable draft uploads
 - `POST /gmail/v1/users/:userId/threads/:id/modify` - add/remove labels across a thread
 - `GET /gmail/v1/users/:userId/threads` and `GET /gmail/v1/users/:userId/threads/:id`
 - `GET /gmail/v1/users/:userId/labels`, `POST /gmail/v1/users/:userId/labels`, `PATCH /gmail/v1/users/:userId/labels/:id`, `DELETE /gmail/v1/users/:userId/labels/:id`
@@ -983,6 +985,8 @@ Google ID tokens are RS256-signed JWTs. The discovery document advertises RS256,
 - `GET /discovery/v1/apis/calendar/v3/rest` — public Calendar v3 REST discovery document
 - `GET /calendar/v3/users/:userId/calendarList`, `GET /calendar/v3/calendars/:calendarId/events`, `POST /calendar/v3/calendars/:calendarId/events`, `DELETE /calendar/v3/calendars/:calendarId/events/:eventId`, `POST /calendar/v3/freeBusy`
 - `GET /drive/v3/files`, `GET /drive/v3/files/:fileId`, `POST /drive/v3/files`, `PATCH /drive/v3/files/:fileId`, `PUT /drive/v3/files/:fileId`, `POST /upload/drive/v3/files`
+
+`POST /upload/gmail/v1/users/:userId/drafts`, `PUT /upload/gmail/v1/users/:userId/drafts/:id`, and `POST /upload/gmail/v1/users/:userId/drafts/send` accept `multipart/related` media uploads (a JSON draft resource part plus a `message/rfc822` part) as well as plain `message/rfc822` bodies. `PUT /upload/gmail/v1/users/:userId/drafts/:id?uploadType=resumable` with an `X-Upload-Content-Length` header opens a resumable session and returns its URL in `Location`. `PUT` each chunk to that URL with `Content-Range`; the emulator answers `308` with a `Range` header until the last chunk replaces the draft message. Sending a draft with a `message.raw` applies that content before sending. Attachment parts keep their `X-Attachment-Id` header, and `q` accepts `in:` and `-in:` mailbox scopes alongside `label:` and `-label:`.
 
 ## Slack API
 
@@ -1201,6 +1205,14 @@ grant_type=refresh_token"
 ### Graph mail search
 
 `GET /v1.0/me/messages` and `GET /v1.0/me/mailFolders/{folderId}/messages` accept URL-encoded `$search` expressions enclosed in one outer quoted string. Search supports literal text, escaped quoted phrases, implicit conjunction, `AND`, `OR`, unary `NOT`, parentheses, and `subject:`, `body:`, `participants:`, `from:`, `to:`, `cc:`, and `bcc:` restrictions. For example, pass `JSON.stringify('subject:"monthly report" AND participants:"person@example.com"')` as the `$search` query parameter using `URLSearchParams`. Search runs before `$top`/`$skip` pagination; `@odata.nextLink` preserves the expression. Metadata restrictions include `importance:low|normal|high` and `hasattachments:true|false`. Numeric-byte `size` comparisons and ISO-date `received` comparisons support `>`, `>=`, `<`, and `<=`. Emulator message size is the UTF-8 subject/body byte count plus attachment sizes, rather than a complete MIME wire size. Plain words combine as an implicit conjunction; quote a phrase to require adjacent words. Unknown properties, unsupported operators, or malformed structured expressions return a Graph `ErrorInvalidSearchQuery` response with HTTP 400. This is a focused mail search subset, not a complete KQL implementation.
+
+### Graph mail sync and attachments
+
+- `GET /v1.0/me/mailFolders/{folderId}/messages/delta` returns the folder's messages and an `@odata.deltaLink`. The link uses the `https://graph.microsoft.com` host, so route it back to the emulator, and it keeps any `$filter`. Following it returns the folder's current messages plus the ones that left it: moved messages as full resources with their new `parentFolderId`, deleted messages as `@removed` entries. `$deltatoken=expired` returns HTTP 410 `SyncStateNotFound`.
+- Messages expose `inferenceClassification` (`focused`, `other`, or `null`) and `flag.flagStatus` (`notFlagged`, `flagged`, or `complete`). Both can be patched and filtered with `$filter` on `inferenceClassification` and `flag/flagStatus`. Seed them with `inference_classification` and `flag_status` (or `flag: { flagStatus }`).
+- `GET /v1.0/me/messages/{id}/attachments/{attachmentId}/$value` returns the raw attachment bytes, and `DELETE /v1.0/me/messages/{id}/attachments/{attachmentId}` removes an attachment.
+- Attachment creation and `createUploadSession` accept `isInline` and `contentId`. Upload session URLs are pre-authenticated, accept chunks of any size, and cancel on `DELETE`. The final chunk returns `201` with a `Location` header for the new attachment.
+- `PATCH /v1.0/me/outlook/masterCategories/{id}` updates a category `color`. Category colors are `preset0` through `preset24` and `none`.
 
 ## AWS
 

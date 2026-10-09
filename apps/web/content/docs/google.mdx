@@ -35,8 +35,13 @@ Google ID tokens are RS256-signed JWTs. The discovery document advertises RS256,
 - `POST /gmail/v1/users/:userId/drafts` - create draft
 - `GET /gmail/v1/users/:userId/drafts/:id` - get draft
 - `PUT /gmail/v1/users/:userId/drafts/:id` - update draft
-- `POST /gmail/v1/users/:userId/drafts/:id/send` - send draft
+- `POST /gmail/v1/users/:userId/drafts/send` - send draft
 - `DELETE /gmail/v1/users/:userId/drafts/:id` - delete draft
+- `POST /upload/gmail/v1/users/:userId/drafts` - create draft from a media upload
+- `PUT /upload/gmail/v1/users/:userId/drafts/:id` - update draft from a media or resumable upload
+- `POST /upload/gmail/v1/users/:userId/drafts/send` - send draft from a media upload
+
+`POST /upload/gmail/v1/users/:userId/drafts`, `PUT /upload/gmail/v1/users/:userId/drafts/:id`, and `POST /upload/gmail/v1/users/:userId/drafts/send` accept `multipart/related` media uploads (a JSON draft resource part plus a `message/rfc822` part) as well as plain `message/rfc822` bodies. `PUT /upload/gmail/v1/users/:userId/drafts/:id?uploadType=resumable` with an `X-Upload-Content-Length` header opens a resumable session and returns its URL in `Location`. `PUT` each chunk to that URL with `Content-Range`; the emulator answers `308` with a `Range` header until the last chunk replaces the draft message. Sending a draft with a `message.raw` applies that content before sending. Attachment parts keep their `X-Attachment-Id` header, and `q` accepts `in:` and `-in:` mailbox scopes alongside `label:` and `-label:`.
 
 ## Gmail Threads
 

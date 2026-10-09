@@ -339,6 +339,8 @@ curl http://localhost:4002/gmail/v1/users/me/messages/msg_id/attachments/att_id 
 
 Upload variants also available at `/upload/gmail/v1/users/:userId/messages`, `.../messages/send`, `.../messages/import`.
 
+`q` accepts `in:` and `-in:` mailbox scopes alongside `label:` and `-label:`. Attachment parts keep their `X-Attachment-Id` header.
+
 ### Drafts
 
 ```bash
@@ -371,6 +373,25 @@ curl -X POST http://localhost:4002/gmail/v1/users/me/drafts/send \
 # Delete draft
 curl -X DELETE http://localhost:4002/gmail/v1/users/me/drafts/draft_id \
   -H "Authorization: Bearer $TOKEN"
+```
+
+`POST /upload/gmail/v1/users/:userId/drafts`, `PUT /upload/gmail/v1/users/:userId/drafts/:id`, and `POST /upload/gmail/v1/users/:userId/drafts/send` accept `multipart/related` media uploads (a JSON draft resource part plus a `message/rfc822` part) as well as plain `message/rfc822` bodies. Sending a draft with a `message.raw` applies that content before sending.
+
+```bash
+# Resumable draft update: open a session, then PUT chunks to the Location URL
+curl -i -X PUT "http://localhost:4002/upload/gmail/v1/users/me/drafts/draft_id?uploadType=resumable" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-Upload-Content-Type: message/rfc822" \
+  -H "X-Upload-Content-Length: 2048" \
+  -d '{"id": "draft_id", "message": {"threadId": "thread_id"}}'
+
+# Each chunk sends Content-Range; intermediate chunks return 308 with a Range header,
+# the last chunk returns the updated draft
+curl -X PUT "$LOCATION" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Range: bytes 0-2047/2048" \
+  --data-binary @message.eml
 ```
 
 ### Threads

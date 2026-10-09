@@ -23,7 +23,7 @@ export interface DriveListOptions {
   orderBy?: string | null;
 }
 
-export interface ParsedDriveUpload {
+export interface ParsedMultipartMediaUpload {
   requestBody: Record<string, unknown>;
   media:
     | {
@@ -139,7 +139,7 @@ export function formatDriveItemResource(item: GoogleDriveItem) {
   };
 }
 
-export function parseDriveMultipartUpload(contentType: string, rawBody: Buffer): ParsedDriveUpload {
+export function parseMultipartMediaUpload(contentType: string, rawBody: Buffer): ParsedMultipartMediaUpload {
   const boundary = extractMultipartBoundary(contentType);
   if (!boundary) {
     return {
@@ -152,7 +152,7 @@ export function parseDriveMultipartUpload(contentType: string, rawBody: Buffer):
   const parts = splitMultipartParts(boundary, raw);
 
   let requestBody: Record<string, unknown> = {};
-  let media: ParsedDriveUpload["media"];
+  let media: ParsedMultipartMediaUpload["media"];
 
   for (const normalized of parts) {
     const separatorIndex = normalized.indexOf("\r\n\r\n");

@@ -34,6 +34,7 @@ import {
   upsertMessageAttachment,
   dedupeRecipients,
 } from "../helpers.js";
+import type { MicrosoftMailFolder, MicrosoftMessage } from "../entities.js";
 import { getMicrosoftStore } from "../store.js";
 import { parseJsonBody } from "../route-helpers.js";
 
@@ -109,6 +110,40 @@ function resolveFolder(ctx: RouteContext, userEmail: string, folderId: string) {
   return getFolderByIdOrWellKnownName(getMicrosoftStore(ctx.store), userEmail, folderId);
 }
 
+function listFolderMessages(
+  ctx: RouteContext,
+  userEmail: string,
+  folder: MicrosoftMailFolder,
+  filterExpression: string | undefined,
+): MicrosoftMessage[] {
+  return filterMessages(
+    getMicrosoftStore(ctx.store)
+      .messages.findBy("user_email", userEmail)
+      .filter((message) => message.parent_folder_id === folder.microsoft_id),
+    filterExpression,
+  );
+}
+
+// The delta token records which messages the folder held, so the next round can report the ones that left it.
+function encodeFolderDeltaToken(messageIds: string[]): string {
+  return Buffer.from(JSON.stringify(messageIds)).toString("base64url");
+}
+
+function decodeFolderDeltaToken(token: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(token, "base64url").toString("utf8"));
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+// Real Graph delta links are absolute graph.microsoft.com URLs; clients route them back to the emulator.
+function folderMessagesDeltaLink(folderId: string, token: string, filterExpression: string | undefined): string {
+  const deltaLink = `https://graph.microsoft.com/v1.0/me/mailFolders/${folderId}/messages/delta?$deltatoken=${encodeURIComponent(token)}`;
+  return filterExpression ? `${deltaLink}&$filter=${encodeURIComponent(filterExpression)}` : deltaLink;
+}
+
 function resolveCalendar(ctx: RouteContext, userEmail: string, calendarId: string) {
   const ms = getMicrosoftStore(ctx.store);
   if (calendarId === "primary") {
@@ -141,6 +176,20 @@ function patchMessageFromBody(ctx: RouteContext, messageId: string, body: Record
     patch.categories = body.categories.filter((value): value is string => typeof value === "string");
   }
   if (typeof body.isRead === "boolean") patch.is_read = body.isRead;
+  if (
+    body.inferenceClassification === "focused" ||
+    body.inferenceClassification === "other" ||
+    body.inferenceClassification === null
+  ) {
+    patch.inference_classification = body.inferenceClassification;
+  }
+  const flag = body.flag;
+  if (flag && typeof flag === "object" && !Array.isArray(flag)) {
+    const flagStatus = (flag as Record<string, unknown>).flagStatus;
+    if (flagStatus === "flagged" || flagStatus === "notFlagged" || flagStatus === "complete") {
+      patch.flag_status = flagStatus;
+    }
+  }
   if (body.importance === "low" || body.importance === "normal" || body.importance === "high") {
     patch.importance = body.importance;
   }
@@ -209,6 +258,45 @@ export function graphRoutes(ctx: RouteContext): void {
     });
   });
 
+  app.get("/v1.0/me/mailFolders/:folderId/messages/delta", (c) => {
+    const authEmail = requireAuthEmail(ctx, c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const folder = resolveFolder(ctx, authEmail, c.req.param("folderId"));
+    if (!folder) return microsoftGraphError(c, 404, "ErrorFolderNotFound", "Folder not found.");
+
+    const deltaToken = c.req.query("$deltatoken");
+    if (deltaToken === "expired") {
+      return microsoftGraphError(
+        c,
+        410,
+        "SyncStateNotFound",
+        "The sync state provided is malformed or does not exist.",
+      );
+    }
+
+    const ms = getMicrosoftStore(ctx.store);
+    const filterExpression = c.req.query("$filter");
+    const current = listFolderMessages(ctx, authEmail, folder, filterExpression);
+    const currentIds = new Set(current.map((message) => message.microsoft_id));
+    const leftIds = deltaToken ? decodeFolderDeltaToken(deltaToken).filter((id) => !currentIds.has(id)) : [];
+
+    return c.json({
+      value: [
+        ...current.map((message) => formatMessageResource(ms, message)),
+        ...leftIds.map((id) => {
+          const message = resolveMessage(ctx, authEmail, id);
+          return message ? formatMessageResource(ms, message) : { id, "@removed": { reason: "deleted" } };
+        }),
+      ],
+      "@odata.deltaLink": folderMessagesDeltaLink(
+        folder.microsoft_id,
+        encodeFolderDeltaToken([...currentIds]),
+        filterExpression,
+      ),
+    });
+  });
+
   app.get("/v1.0/me/mailFolders/:folderId/messages", (c) => {
     const authEmail = requireAuthEmail(ctx, c);
     if (authEmail instanceof Response) return authEmail;
@@ -220,12 +308,7 @@ export function graphRoutes(ctx: RouteContext): void {
     const { top, skip } = getTopAndSkip(c);
     const searched = searchGraphMessages(
       c,
-      filterMessages(
-        ms.messages
-          .findBy("user_email", authEmail)
-          .filter((message) => message.parent_folder_id === folder.microsoft_id),
-        c.req.query("$filter"),
-      ),
+      listFolderMessages(ctx, authEmail, folder, c.req.query("$filter")),
       c.req.query("$search"),
       ms.attachments.all(),
     );
@@ -509,6 +592,24 @@ export function graphRoutes(ctx: RouteContext): void {
     }
   });
 
+  app.get("/v1.0/me/messages/:messageId/attachments/:attachmentId/$value", (c) => {
+    const authEmail = requireAuthEmail(ctx, c);
+    if (authEmail instanceof Response) return authEmail;
+    const ms = getMicrosoftStore(ctx.store);
+    const attachment = ms.attachments
+      .findBy("user_email", authEmail)
+      .find(
+        (entry) =>
+          entry.message_microsoft_id === c.req.param("messageId") && entry.microsoft_id === c.req.param("attachmentId"),
+      );
+    if (!attachment) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Attachment not found.");
+    const bytes = Buffer.from(attachment.content_bytes, "base64");
+    return c.body(bytes, 200, {
+      "Content-Type": attachment.content_type || "application/octet-stream",
+      "Content-Length": String(bytes.byteLength),
+    });
+  });
+
   app.get("/v1.0/me/messages/:messageId/attachments/:attachmentId", (c) => {
     const authEmail = requireAuthEmail(ctx, c);
     if (authEmail instanceof Response) return authEmail;
@@ -547,8 +648,24 @@ export function graphRoutes(ctx: RouteContext): void {
       name: typeof body.name === "string" ? body.name : "attachment.bin",
       content_type: typeof body.contentType === "string" ? body.contentType : "application/octet-stream",
       content_bytes: typeof body.contentBytes === "string" ? body.contentBytes : "",
+      is_inline: body.isInline === true,
+      content_id: typeof body.contentId === "string" ? body.contentId : null,
     });
     return c.json(formatAttachmentResource(attachment), 201);
+  });
+
+  app.delete("/v1.0/me/messages/:messageId/attachments/:attachmentId", (c) => {
+    const authEmail = requireAuthEmail(ctx, c);
+    if (authEmail instanceof Response) return authEmail;
+    const ms = getMicrosoftStore(ctx.store);
+    const message = resolveMessage(ctx, authEmail, c.req.param("messageId"));
+    if (!message) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Message not found.");
+    const attachments = ms.attachments.findBy("message_microsoft_id", message.microsoft_id);
+    const attachment = attachments.find((entry) => entry.microsoft_id === c.req.param("attachmentId"));
+    if (!attachment) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Attachment not found.");
+    ms.attachments.delete(attachment.id);
+    if (attachments.length === 1) ms.messages.update(message.id, { has_attachments: false });
+    return c.body(null, 204);
   });
 
   app.post("/v1.0/me/messages/:messageId/attachments/createUploadSession", async (c) => {
@@ -570,6 +687,8 @@ export function graphRoutes(ctx: RouteContext): void {
       contentType:
         typeof attachmentItem.contentType === "string" ? attachmentItem.contentType : "application/octet-stream",
       totalSize: typeof attachmentItem.size === "number" ? attachmentItem.size : 0,
+      isInline: attachmentItem.isInline === true,
+      contentId: typeof attachmentItem.contentId === "string" ? attachmentItem.contentId : null,
       uploadedBytes: 0,
       contentBytes: "",
     });
@@ -578,6 +697,14 @@ export function graphRoutes(ctx: RouteContext): void {
       expirationDateTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       nextExpectedRanges: ["0-"],
     });
+  });
+
+  app.delete("/upload/microsoft/v1.0/messages/:messageId/attachments/sessions/:sessionId", (c) => {
+    const sessions = getUploadSessions(ctx);
+    if (sessions.get(c.req.param("sessionId"))?.messageId === c.req.param("messageId")) {
+      sessions.delete(c.req.param("sessionId"));
+    }
+    return c.body(null, 204);
   });
 
   app.get("/upload/microsoft/v1.0/messages/:messageId/attachments/sessions/:sessionId", (c) => {
@@ -609,7 +736,7 @@ export function graphRoutes(ctx: RouteContext): void {
     }
     const chunk = Buffer.from(await c.req.arrayBuffer());
     const updatedBytes = end + 1;
-    session.contentBytes += chunk.toString("base64");
+    session.contentBytes = Buffer.concat([Buffer.from(session.contentBytes, "base64"), chunk]).toString("base64");
     session.totalSize = total;
     session.uploadedBytes = updatedBytes;
     getUploadSessions(ctx).set(session.sessionId, session);
@@ -623,9 +750,14 @@ export function graphRoutes(ctx: RouteContext): void {
         content_type: session.contentType,
         size: total,
         content_bytes: session.contentBytes,
+        is_inline: session.isInline,
+        content_id: session.contentId,
       });
       getUploadSessions(ctx).delete(session.sessionId);
-      return c.json(formatAttachmentResource(attachment), 201);
+      return c.json(formatAttachmentResource(attachment), 201, {
+        Location: `${ctx.baseUrl}/api/v2.0/Users('${session.userEmail}')/Messages('${session.messageId}')/Attachments('${attachment.microsoft_id}')`,
+        "Access-Control-Expose-Headers": "Location",
+      });
     }
 
     return c.json(
@@ -744,6 +876,22 @@ export function graphRoutes(ctx: RouteContext): void {
       .find((entry) => entry.microsoft_id === c.req.param("categoryId"));
     if (!category) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Category not found.");
     return c.json(formatCategoryResource(category));
+  });
+
+  app.patch("/v1.0/me/outlook/masterCategories/:categoryId", async (c) => {
+    const authEmail = requireAuthEmail(ctx, c);
+    if (authEmail instanceof Response) return authEmail;
+    const ms = getMicrosoftStore(ctx.store);
+    const category = ms.categories
+      .findBy("user_email", authEmail)
+      .find((entry) => entry.microsoft_id === c.req.param("categoryId"));
+    if (!category) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Category not found.");
+    const body = await parseJsonBody(c);
+    if (typeof body.color !== "string" || !OUTLOOK_COLORS.includes(body.color as any)) {
+      return microsoftGraphError(c, 400, "InvalidRequest", "A valid category color is required.");
+    }
+    const updated = ms.categories.update(category.id, { color: body.color })!;
+    return c.json(formatCategoryResource(updated));
   });
 
   app.delete("/v1.0/me/outlook/masterCategories/:categoryId", (c) => {

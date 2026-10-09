@@ -1,6 +1,6 @@
 import type { Context } from "@emulators/core";
 import type { GoogleCalendarEventInput } from "./calendar-helpers.js";
-import type { GoogleDriveItemInput } from "./drive-helpers.js";
+import { parseMultipartMediaUpload, type GoogleDriveItemInput } from "./drive-helpers.js";
 import type { GoogleMessageInput } from "./helpers.js";
 import { getAuthenticatedEmail, googleApiError, matchesRequestedUser } from "./helpers.js";
 
@@ -28,6 +28,11 @@ export function requireGmailUser(c: Context): string | Response {
 
 export async function parseGoogleBody(c: Context): Promise<Record<string, unknown>> {
   const contentType = c.req.header("Content-Type") ?? "";
+  if (contentType.includes("multipart/related")) {
+    const { requestBody, media } = parseMultipartMediaUpload(contentType, Buffer.from(await c.req.arrayBuffer()));
+    return media ? { ...requestBody, raw: media.body.toString("base64url") } : requestBody;
+  }
+
   const rawText = await c.req.text();
 
   if (!rawText) return {};

@@ -5,7 +5,7 @@ import {
   formatDriveItemResource,
   getDriveItemById,
   listDriveItems,
-  parseDriveMultipartUpload,
+  parseMultipartMediaUpload,
   updateDriveItemRecord,
 } from "../drive-helpers.js";
 import { googleApiError } from "../helpers.js";
@@ -31,7 +31,7 @@ export function driveRoutes({ app, store }: RouteContext): void {
 
     if (contentType.includes("multipart/related")) {
       const rawBody = Buffer.from(await c.req.raw.arrayBuffer());
-      const parsed = parseDriveMultipartUpload(contentType, rawBody);
+      const parsed = parseMultipartMediaUpload(contentType, rawBody);
       requestBody = parsed.requestBody;
       media = parsed.media;
     } else {

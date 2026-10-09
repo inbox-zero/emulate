@@ -57,6 +57,7 @@ export interface GoogleAttachment extends Entity {
   disposition: string | null;
   content_id: string | null;
   transfer_encoding: string | null;
+  attachment_id_header: string | null;
   data: string;
   size: number;
 }
