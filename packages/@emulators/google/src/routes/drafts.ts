@@ -4,6 +4,7 @@ import {
   createDraftMessage,
   deleteDraftMessage,
   formatDraftResource,
+  generateUid,
   getDraftById,
   getDraftMessage,
   googleApiError,
@@ -23,15 +24,59 @@ import {
 } from "../route-helpers.js";
 import { getGoogleStore } from "../store.js";
 
-export function draftRoutes({ app, store }: RouteContext): void {
+type ResumableDraftUpload = {
+  userEmail: string;
+  draftId: string;
+  metadata: Record<string, unknown>;
+  total: number;
+  received: number;
+  chunks: Buffer[];
+};
+
+export function draftRoutes({ app, store, baseUrl }: RouteContext): void {
   const gs = getGoogleStore(store);
+
+  const getResumableUploads = () => {
+    let uploads = store.getData<Map<string, ResumableDraftUpload>>("google.resumableDraftUploads");
+    if (!uploads) {
+      uploads = new Map();
+      store.setData("google.resumableDraftUploads", uploads);
+    }
+    return uploads;
+  };
+
+  const applyDraftUpdate = (c: Context, authEmail: string, draftId: string, messageBody: Record<string, unknown>) => {
+    const draft = getDraftById(gs, authEmail, draftId);
+    if (!draft) {
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+
+    try {
+      const updated = updateDraftMessage(gs, draft, parseMessageInputFromBody(messageBody));
+      if (!updated) {
+        return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+      }
+
+      return c.json(formatDraftResource(gs, updated.draft, "full"));
+    } catch {
+      return googleApiError(c, 400, "Invalid raw MIME message payload.", "invalidArgument", "INVALID_ARGUMENT");
+    }
+  };
+
+  const updateHandler = async (c: Context) => {
+    const authEmail = requireGmailUser(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const body = await parseGoogleBody(c);
+    return applyDraftUpdate(c, authEmail, c.req.param("id")!, getDraftMessageBody(body));
+  };
 
   const createHandler = async (c: Context) => {
     const authEmail = requireGmailUser(c);
     if (authEmail instanceof Response) return authEmail;
 
     const body = await parseGoogleBody(c);
-    const messageBody = getRecord(body, "message") ?? body;
+    const messageBody = getDraftMessageBody(body);
 
     try {
       const { draft } = createDraftMessage(gs, {
@@ -60,7 +105,17 @@ export function draftRoutes({ app, store }: RouteContext): void {
       return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
-    const message = sendDraftMessage(gs, draft);
+    let draftToSend = draft;
+    const messageBody = getDraftMessageBody(body);
+    if (getString(messageBody, "raw")) {
+      try {
+        draftToSend = updateDraftMessage(gs, draft, parseMessageInputFromBody(messageBody))?.draft ?? draft;
+      } catch {
+        return googleApiError(c, 400, "Invalid raw MIME message payload.", "invalidArgument", "INVALID_ARGUMENT");
+      }
+    }
+
+    const message = sendDraftMessage(gs, draftToSend);
     if (!message) {
       return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
@@ -133,29 +188,79 @@ export function draftRoutes({ app, store }: RouteContext): void {
     );
   });
 
-  app.put("/gmail/v1/users/:userId/drafts/:id", async (c) => {
+  app.put("/gmail/v1/users/:userId/drafts/:id", updateHandler);
+
+  app.put("/upload/gmail/v1/users/:userId/drafts/:id", async (c) => {
+    const url = new URL(c.req.url);
+    const uploadId = url.searchParams.get("upload_id");
+    if (!uploadId && url.searchParams.get("uploadType") !== "resumable") {
+      return updateHandler(c);
+    }
+
     const authEmail = requireGmailUser(c);
     if (authEmail instanceof Response) return authEmail;
+    const uploads = getResumableUploads();
 
-    const draft = getDraftById(gs, authEmail, c.req.param("id"));
-    if (!draft) {
+    if (uploadId) {
+      const upload = uploads.get(uploadId);
+      if (!upload || upload.userEmail !== authEmail || upload.draftId !== c.req.param("id")) {
+        return googleApiError(c, 404, "Upload session not found.", "notFound", "NOT_FOUND");
+      }
+
+      const range = (c.req.header("Content-Range") ?? "").match(/^bytes (\d+)-(\d+)\/(\d+)$/);
+      const chunk = Buffer.from(await c.req.arrayBuffer());
+      if (
+        !range ||
+        Number(range[1]) !== upload.received ||
+        Number(range[3]) !== upload.total ||
+        chunk.length !== Number(range[2]) - Number(range[1]) + 1
+      ) {
+        return googleApiError(c, 400, "Invalid upload range.", "invalidArgument", "INVALID_ARGUMENT");
+      }
+
+      upload.chunks.push(chunk);
+      upload.received += chunk.length;
+      if (upload.received < upload.total) {
+        return c.body(null, 308, { Range: `bytes=0-${upload.received - 1}` });
+      }
+
+      uploads.delete(uploadId);
+      return applyDraftUpdate(c, authEmail, upload.draftId, {
+        ...(getRecord(upload.metadata, "message") ?? {}),
+        raw: Buffer.concat(upload.chunks).toString("base64url"),
+      });
+    }
+
+    const draftId = c.req.param("id")!;
+    if (!getDraftById(gs, authEmail, draftId)) {
       return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
     }
 
-    const body = await parseGoogleBody(c);
-    const messageBody = getRecord(body, "message") ?? body;
-
-    try {
-      const updated = updateDraftMessage(gs, draft, parseMessageInputFromBody(messageBody));
-
-      if (!updated) {
-        return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
-      }
-
-      return c.json(formatDraftResource(gs, updated.draft, "full"));
-    } catch {
-      return googleApiError(c, 400, "Invalid raw MIME message payload.", "invalidArgument", "INVALID_ARGUMENT");
+    const total = Number(c.req.header("X-Upload-Content-Length"));
+    if (!Number.isSafeInteger(total) || total <= 0) {
+      return googleApiError(
+        c,
+        400,
+        "X-Upload-Content-Length must be a positive integer.",
+        "invalidArgument",
+        "INVALID_ARGUMENT",
+      );
     }
+
+    const id = generateUid("upload");
+    uploads.set(id, {
+      userEmail: authEmail,
+      draftId,
+      metadata: await parseGoogleBody(c),
+      total,
+      received: 0,
+      chunks: [],
+    });
+
+    const location = new URL(url.pathname, baseUrl);
+    location.searchParams.set("uploadType", "resumable");
+    location.searchParams.set("upload_id", id);
+    return c.body(null, 200, { Location: location.toString() });
   });
 
   app.post("/gmail/v1/users/:userId/drafts/send", sendHandler);
@@ -173,4 +278,12 @@ export function draftRoutes({ app, store }: RouteContext): void {
     deleteDraftMessage(gs, draft);
     return c.body(null, 204);
   });
+}
+
+// A media upload carries the MIME bytes beside the Draft resource rather than inside its message.
+function getDraftMessageBody(body: Record<string, unknown>): Record<string, unknown> {
+  const message = getRecord(body, "message");
+  if (!message) return body;
+  const raw = getString(body, "raw");
+  return raw === undefined ? message : { ...message, raw };
 }

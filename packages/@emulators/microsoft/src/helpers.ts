@@ -4,6 +4,8 @@ import type {
   MicrosoftCalendar,
   MicrosoftCalendarEvent,
   MicrosoftDriveItem,
+  MicrosoftFlagStatus,
+  MicrosoftInferenceClassification,
   MicrosoftMailFolder,
   MicrosoftMasterCategory,
   MicrosoftMessage,
@@ -37,6 +39,22 @@ export const OUTLOOK_COLORS = [
   "preset7",
   "preset8",
   "preset9",
+  "preset10",
+  "preset11",
+  "preset12",
+  "preset13",
+  "preset14",
+  "preset15",
+  "preset16",
+  "preset17",
+  "preset18",
+  "preset19",
+  "preset20",
+  "preset21",
+  "preset22",
+  "preset23",
+  "preset24",
+  "none",
 ] as const;
 
 type GraphRecipient = { emailAddress: { address: string; name?: string } };
@@ -62,6 +80,8 @@ export interface MicrosoftMessageInput {
   sent_date_time?: string | null;
   is_draft?: boolean;
   is_read?: boolean;
+  inference_classification?: MicrosoftInferenceClassification | null;
+  flag_status?: MicrosoftFlagStatus;
   importance?: "low" | "normal" | "high";
   categories?: string[];
   parent_folder_id: string;
@@ -88,6 +108,8 @@ export interface UploadSessionRecord {
   attachmentName: string;
   contentType: string;
   totalSize: number;
+  isInline: boolean;
+  contentId: string | null;
   uploadedBytes: number;
   contentBytes: string;
 }
@@ -371,6 +393,12 @@ export function createMessageRecord(ms: MicrosoftStore, input: MicrosoftMessageI
     last_modified_date_time: now,
     is_draft: input.is_draft ?? false,
     is_read: input.is_read ?? false,
+    // Seed files are untyped YAML or JSON, so unknown values fall back to Graph's defaults.
+    inference_classification:
+      input.inference_classification === "focused" || input.inference_classification === "other"
+        ? input.inference_classification
+        : null,
+    flag_status: input.flag_status === "flagged" || input.flag_status === "complete" ? input.flag_status : "notFlagged",
     importance: input.importance ?? "normal",
     categories: input.categories ?? [],
     parent_folder_id: input.parent_folder_id,
@@ -601,6 +629,8 @@ export function formatMessageResource(ms: MicrosoftStore, message: MicrosoftMess
     lastModifiedDateTime: message.last_modified_date_time,
     isDraft: message.is_draft,
     isRead: message.is_read,
+    inferenceClassification: message.inference_classification,
+    flag: { flagStatus: message.flag_status },
     importance: message.importance,
     categories: message.categories,
     parentFolderId: message.parent_folder_id,
@@ -941,6 +971,10 @@ function messageField(message: MicrosoftMessage, field: string): string | boolea
       return message.has_attachments;
     case "isRead":
       return message.is_read;
+    case "inferenceClassification":
+      return message.inference_classification;
+    case "flag/flagStatus":
+      return message.flag_status;
     case "from/emailAddress/address":
       return message.from_address;
     default:

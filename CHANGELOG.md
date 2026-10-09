@@ -2,6 +2,29 @@
 
 <!-- release:start -->
 
+## 0.13.0
+
+### New Features
+
+- **Gmail draft uploads** accept multipart media uploads for draft create, update, and send, plus resumable draft updates with chunked `Content-Range` uploads
+- **Microsoft folder delta** adds `GET /v1.0/me/mailFolders/{folderId}/messages/delta` with filter-preserving delta links, `@removed` entries, and expired-token responses
+- **Microsoft message state** stores, filters, patches, and seeds `inferenceClassification` and `flag.flagStatus`
+- **Microsoft attachments** add raw `$value` downloads, attachment deletion, inline attachments, upload session cancellation, and a `Location` header on completed uploads
+- **Programmatic API** accepts a `hostname` option to bind the HTTP server to a specific interface
+
+### Improvements
+
+- **Gmail search** supports `-in:` mailbox exclusions
+- **Gmail attachments** keep each part's `X-Attachment-Id` header
+- **Gmail draft send** applies a supplied `message.raw` before sending
+- **Microsoft categories** support the full Outlook color set and color updates through `PATCH`
+
+### Bug Fixes
+
+- Fixed **Microsoft upload sessions** corrupting attachments whose chunks are not multiples of three bytes
+
+<!-- release:end -->
+
 ## 0.12.0
 
 ### New Features
@@ -21,8 +44,6 @@
 - @ctate
 - @K-Mistele
 - @Railly
-
-<!-- release:end -->
 
 ## 0.11.2
 

@@ -13,6 +13,7 @@ import {
   generateOid,
   seedDefaultMailbox,
 } from "./helpers.js";
+import type { MicrosoftFlagStatus, MicrosoftInferenceClassification } from "./entities.js";
 import { graphRoutes } from "./routes/graph.js";
 import { oauthRoutes } from "./routes/oauth.js";
 
@@ -63,6 +64,9 @@ export interface MicrosoftSeedConfig {
     received_date_time?: string;
     is_draft?: boolean;
     is_read?: boolean;
+    inference_classification?: MicrosoftInferenceClassification | null;
+    flag_status?: MicrosoftFlagStatus;
+    flag?: { flagStatus?: MicrosoftFlagStatus };
     importance?: "low" | "normal" | "high";
     categories?: string[];
     parent_folder_id?: string;
@@ -204,6 +208,8 @@ export function seedFromConfig(store: Store, baseUrl: string, config: MicrosoftS
         received_date_time: message.received_date_time,
         is_draft: message.is_draft,
         is_read: message.is_read,
+        inference_classification: message.inference_classification,
+        flag_status: message.flag_status ?? message.flag?.flagStatus,
         importance: message.importance,
         categories: message.categories,
         parent_folder_id:

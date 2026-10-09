@@ -35,6 +35,20 @@ describe("createEmulator", () => {
     await github.close();
   });
 
+  it("binds the listener to an explicit hostname", async () => {
+    const github = await createEmulator({ service: "github", port: 14005, hostname: "127.0.0.1" });
+
+    try {
+      const res = await fetch("http://127.0.0.1:14005/user", {
+        headers: { Authorization: "token test_token_admin" },
+      });
+      expect(res.status).toBe(200);
+      await expect(fetch("http://[::1]:14005/user")).rejects.toThrow();
+    } finally {
+      await github.close();
+    }
+  });
+
   it("starts multiple services independently", async () => {
     const [github, vercel] = await Promise.all([
       createEmulator({ service: "github", port: 14010 }),

@@ -435,6 +435,16 @@ describe("Google plugin integration", () => {
     expect(body.resultSizeEstimate).toBe(3);
   });
 
+  it("excludes messages in a mailbox with negated in: queries", async () => {
+    const res = await app.request(`${base}/gmail/v1/users/me/messages?q=${encodeURIComponent("-in:inbox -in:draft")}`, {
+      headers: authHeaders(),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { messages: Array<{ id: string }> };
+    expect(body.messages.map((message) => message.id)).toEqual(["msg_support_2"]);
+  });
+
   it("uses the first message id as the thread id and preserves it for replies", () => {
     const store = new Store();
     const gs = getGoogleStore(store);
@@ -715,6 +725,181 @@ describe("Google plugin integration", () => {
       headers: authHeaders(),
     });
     expect(deletedMessageRes.status).toBe(404);
+  });
+
+  it("keeps the X-Attachment-Id header on attachment parts", async () => {
+    const raw = Buffer.from(
+      [
+        "From: Contracts <contracts@example.com>",
+        "To: testuser@example.com",
+        "Subject: Inline logo",
+        'Content-Type: multipart/mixed; boundary="mixed"',
+        "",
+        "--mixed",
+        "Content-Type: text/plain; charset=utf-8",
+        "",
+        "See the logo.",
+        "--mixed",
+        'Content-Type: image/png; name="logo.png"',
+        'Content-Disposition: inline; filename="logo.png"',
+        "Content-ID: <logo@example.com>",
+        "X-Attachment-Id: logo-attachment",
+        "Content-Transfer-Encoding: base64",
+        "",
+        Buffer.from("png-bytes").toString("base64"),
+        "--mixed--",
+        "",
+      ].join("\r\n"),
+    ).toString("base64url");
+
+    const importRes = await jsonRequest(app, "/gmail/v1/users/me/messages/import", {
+      method: "POST",
+      body: { raw, labelIds: ["INBOX"] },
+    });
+    expect(importRes.status).toBe(200);
+    const imported = (await importRes.json()) as { id: string };
+
+    const messageRes = await app.request(`${base}/gmail/v1/users/me/messages/${imported.id}`, {
+      headers: authHeaders(),
+    });
+    const message = (await messageRes.json()) as {
+      payload: { parts?: Array<{ filename?: string; headers: Array<{ name: string; value: string }> }> };
+    };
+    const logoPart = message.payload.parts?.find((part) => part.filename === "logo.png");
+    expect(logoPart?.headers).toContainEqual({ name: "X-Attachment-Id", value: "logo-attachment" });
+  });
+
+  it("creates, updates, and sends drafts through Gmail media uploads", async () => {
+    const boundary = "gmail-media-boundary";
+    const mediaBody = (metadata: unknown, rawMessage: string) =>
+      [
+        `--${boundary}`,
+        "Content-Type: application/json; charset=UTF-8",
+        "",
+        JSON.stringify(metadata),
+        `--${boundary}`,
+        "Content-Type: message/rfc822",
+        "",
+        rawMessage,
+        `--${boundary}--`,
+        "",
+      ].join("\r\n");
+    const mimeMessage = (subject: string) =>
+      Buffer.from(
+        buildRawMessage({ from: "testuser@example.com", to: "partner@example.com", subject, body_text: subject }),
+        "base64url",
+      ).toString("utf8");
+    const mediaHeaders = authHeaders({ "Content-Type": `multipart/related; boundary=${boundary}` });
+    const subjectOf = (draft: { message: { payload: { headers: Array<{ name: string; value: string }> } } }) =>
+      draft.message.payload.headers.find((header) => header.name === "Subject")?.value;
+
+    const createRes = await app.request(`${base}/upload/gmail/v1/users/me/drafts?uploadType=multipart`, {
+      method: "POST",
+      headers: mediaHeaders,
+      body: mediaBody({ message: { threadId: "thread_support" } }, mimeMessage("Uploaded draft")),
+    });
+    expect(createRes.status).toBe(200);
+    const created = (await createRes.json()) as {
+      id: string;
+      message: { id: string; threadId: string; payload: { headers: Array<{ name: string; value: string }> } };
+    };
+    expect(created.message.threadId).toBe("thread_support");
+    expect(subjectOf(created)).toBe("Uploaded draft");
+
+    const updateRes = await app.request(`${base}/upload/gmail/v1/users/me/drafts/${created.id}?uploadType=multipart`, {
+      method: "PUT",
+      headers: mediaHeaders,
+      body: mediaBody({ id: created.id, message: { threadId: "thread_support" } }, mimeMessage("Uploaded update")),
+    });
+    expect(updateRes.status).toBe(200);
+    expect(subjectOf((await updateRes.json()) as typeof created)).toBe("Uploaded update");
+
+    const sendRes = await app.request(`${base}/upload/gmail/v1/users/me/drafts/send?uploadType=multipart`, {
+      method: "POST",
+      headers: mediaHeaders,
+      body: mediaBody({ id: created.id, message: { threadId: "thread_support" } }, mimeMessage("Uploaded send")),
+    });
+    expect(sendRes.status).toBe(200);
+    const sent = (await sendRes.json()) as { id: string; labelIds: string[] };
+    expect(sent.labelIds).toContain("SENT");
+
+    const sentRes = await app.request(`${base}/gmail/v1/users/me/messages/${sent.id}`, { headers: authHeaders() });
+    const sentMessage = (await sentRes.json()) as { payload: { headers: Array<{ name: string; value: string }> } };
+    expect(sentMessage.payload.headers.find((header) => header.name === "Subject")?.value).toBe("Uploaded send");
+  });
+
+  it("replaces a draft message through a resumable upload", async () => {
+    const createRes = await jsonRequest(app, "/gmail/v1/users/me/drafts", {
+      method: "POST",
+      body: {
+        message: { raw: buildRawMessage({ from: "testuser@example.com", to: "a@example.com", subject: "Old" }) },
+      },
+    });
+    const created = (await createRes.json()) as { id: string };
+
+    const message = Buffer.from(
+      buildRawMessage({
+        from: "testuser@example.com",
+        to: "a@example.com",
+        subject: "Resumed",
+        body_text: "Uploaded in chunks.",
+      }),
+      "base64url",
+    );
+
+    const missingRes = await jsonRequest(app, "/upload/gmail/v1/users/me/drafts/r-missing?uploadType=resumable", {
+      method: "PUT",
+      headers: { "X-Upload-Content-Length": String(message.length) },
+      body: { message: {} },
+    });
+    expect(missingRes.status).toBe(404);
+
+    const startRes = await jsonRequest(app, `/upload/gmail/v1/users/me/drafts/${created.id}?uploadType=resumable`, {
+      method: "PUT",
+      headers: { "X-Upload-Content-Type": "message/rfc822", "X-Upload-Content-Length": String(message.length) },
+      body: { id: created.id, message: { threadId: "thread_support" } },
+    });
+    expect(startRes.status).toBe(200);
+    const sessionUrl = startRes.headers.get("Location")!;
+    expect(sessionUrl).toMatch(
+      new RegExp(`^${base}/upload/gmail/v1/users/me/drafts/${created.id}\\?uploadType=resumable&upload_id=`),
+    );
+
+    const split = Math.floor(message.length / 2);
+    const firstRes = await app.request(sessionUrl, {
+      method: "PUT",
+      headers: authHeaders({ "Content-Range": `bytes 0-${split - 1}/${message.length}` }),
+      body: message.subarray(0, split),
+    });
+    expect(firstRes.status).toBe(308);
+    expect(firstRes.headers.get("Range")).toBe(`bytes=0-${split - 1}`);
+
+    const outOfOrderRes = await app.request(sessionUrl, {
+      method: "PUT",
+      headers: authHeaders({ "Content-Range": `bytes 0-${split - 1}/${message.length}` }),
+      body: message.subarray(0, split),
+    });
+    expect(outOfOrderRes.status).toBe(400);
+
+    const finalRes = await app.request(sessionUrl, {
+      method: "PUT",
+      headers: authHeaders({ "Content-Range": `bytes ${split}-${message.length - 1}/${message.length}` }),
+      body: message.subarray(split),
+    });
+    expect(finalRes.status).toBe(200);
+    const updated = (await finalRes.json()) as {
+      id: string;
+      message: { threadId: string; payload: { headers: Array<{ name: string; value: string }> } };
+    };
+    expect(updated.id).toBe(created.id);
+    expect(updated.message.payload.headers.find((header) => header.name === "Subject")?.value).toBe("Resumed");
+
+    const reusedRes = await app.request(sessionUrl, {
+      method: "PUT",
+      headers: authHeaders({ "Content-Range": `bytes ${split}-${message.length - 1}/${message.length}` }),
+      body: message.subarray(split),
+    });
+    expect(reusedRes.status).toBe(404);
   });
 
   it("tracks history entries after watch registration", async () => {

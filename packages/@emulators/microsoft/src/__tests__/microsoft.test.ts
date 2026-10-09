@@ -987,6 +987,247 @@ describe("Microsoft plugin integration", () => {
     expect(batchBody.responses[0]?.status).toBe(200);
   });
 
+  it("stores, filters, and patches message flags and inbox classification", async () => {
+    const accessToken = await getAccessToken(app);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    seedFromConfig(store, base, {
+      messages: [
+        {
+          id: "msg_focused_flagged",
+          user_email: "testuser@example.com",
+          subject: "Focused and flagged",
+          inference_classification: "focused",
+          flag: { flagStatus: "flagged" },
+        },
+        {
+          id: "msg_other_complete",
+          user_email: "testuser@example.com",
+          subject: "Other and complete",
+          inference_classification: "other",
+          flag_status: "complete",
+        },
+        { id: "msg_unclassified", user_email: "testuser@example.com", subject: "Unclassified" },
+      ],
+    });
+
+    const getMessage = async (id: string) =>
+      (await (await app.request(`${base}/v1.0/me/messages/${id}`, { headers })).json()) as Record<string, unknown>;
+    expect(await getMessage("msg_focused_flagged")).toMatchObject({
+      inferenceClassification: "focused",
+      flag: { flagStatus: "flagged" },
+    });
+    expect(await getMessage("msg_unclassified")).toMatchObject({
+      inferenceClassification: null,
+      flag: { flagStatus: "notFlagged" },
+    });
+
+    const listIds = async (filter: string) => {
+      const res = await app.request(`${base}/v1.0/me/messages?$top=50&$filter=${encodeURIComponent(filter)}`, {
+        headers,
+      });
+      const body = (await res.json()) as { value: Array<{ id: string }> };
+      return body.value.map((message) => message.id);
+    };
+    expect(await listIds("flag/flagStatus eq 'flagged'")).toEqual(["msg_focused_flagged"]);
+    expect(await listIds("inferenceClassification eq 'other'")).toEqual(["msg_other_complete"]);
+
+    const patchRes = await app.request(`${base}/v1.0/me/messages/msg_unclassified`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ inferenceClassification: "other", flag: { flagStatus: "flagged" } }),
+    });
+    expect(patchRes.status).toBe(200);
+    expect(await patchRes.json()).toMatchObject({ inferenceClassification: "other", flag: { flagStatus: "flagged" } });
+    expect(await listIds("flag/flagStatus eq 'flagged' and inferenceClassification eq 'other'")).toEqual([
+      "msg_unclassified",
+    ]);
+  });
+
+  it("tracks folder message changes through delta links", async () => {
+    const accessToken = await getAccessToken(app);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    seedFromConfig(store, base, {
+      messages: [
+        { id: "msg_delta_stays", user_email: "testuser@example.com", subject: "Stays", is_read: false },
+        { id: "msg_delta_moves", user_email: "testuser@example.com", subject: "Moves", is_read: false },
+        { id: "msg_delta_deleted", user_email: "testuser@example.com", subject: "Deleted", is_read: false },
+        { id: "msg_delta_read", user_email: "testuser@example.com", subject: "Already read", is_read: true },
+      ],
+    });
+    const filter = "isRead eq false";
+    const followDeltaLink = (deltaLink: string) =>
+      app.request(deltaLink.replace("https://graph.microsoft.com", base), { headers });
+
+    const initialRes = await app.request(
+      `${base}/v1.0/me/mailFolders/inbox/messages/delta?$filter=${encodeURIComponent(filter)}`,
+      { headers },
+    );
+    expect(initialRes.status).toBe(200);
+    const initial = (await initialRes.json()) as { value: Array<{ id: string }>; "@odata.deltaLink": string };
+    const initialIds = initial.value.map((message) => message.id);
+    expect(initialIds).toEqual(expect.arrayContaining(["msg_delta_stays", "msg_delta_moves", "msg_delta_deleted"]));
+    expect(initialIds).not.toContain("msg_delta_read");
+    const deltaLink = new URL(initial["@odata.deltaLink"]);
+    expect(deltaLink.origin).toBe("https://graph.microsoft.com");
+    expect(deltaLink.pathname).toBe("/v1.0/me/mailFolders/inbox/messages/delta");
+    expect(deltaLink.searchParams.get("$filter")).toBe(filter);
+
+    await app.request(`${base}/v1.0/me/messages/msg_delta_moves/move`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ destinationId: "archive" }),
+    });
+    const ms = getMicrosoftStore(store);
+    ms.messages.delete(ms.messages.findOneBy("microsoft_id", "msg_delta_deleted")!.id);
+
+    const nextRes = await followDeltaLink(initial["@odata.deltaLink"]);
+    expect(nextRes.status).toBe(200);
+    const next = (await nextRes.json()) as {
+      value: Array<{ id: string; parentFolderId?: string; "@removed"?: { reason: string } }>;
+    };
+    expect(next.value.find((message) => message.id === "msg_delta_stays")).toBeDefined();
+    expect(next.value.find((message) => message.id === "msg_delta_moves")?.parentFolderId).toBe("archive");
+    expect(next.value.find((message) => message.id === "msg_delta_deleted")).toEqual({
+      id: "msg_delta_deleted",
+      "@removed": { reason: "deleted" },
+    });
+
+    const expiredRes = await app.request(`${base}/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=expired`, {
+      headers,
+    });
+    expect(expiredRes.status).toBe(410);
+    expect(((await expiredRes.json()) as { error: { code: string } }).error.code).toBe("SyncStateNotFound");
+  });
+
+  it("serves, deletes, and uploads inline message attachments", async () => {
+    const accessToken = await getAccessToken(app);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const jsonHeaders = { ...headers, "Content-Type": "application/json" };
+    const draftRes = await app.request(`${base}/v1.0/me/messages`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ subject: "Inline images" }),
+    });
+    const draftId = String(((await draftRes.json()) as Record<string, unknown>).id);
+
+    const logoBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
+    const inlineRes = await app.request(`${base}/v1.0/me/messages/${draftId}/attachments`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        name: "logo.png",
+        contentType: "image/png",
+        contentBytes: logoBytes.toString("base64"),
+        isInline: true,
+        contentId: "logo@example.com",
+      }),
+    });
+    expect(inlineRes.status).toBe(201);
+    const inline = (await inlineRes.json()) as { id: string; isInline: boolean; contentId: string };
+    expect(inline).toMatchObject({ isInline: true, contentId: "logo@example.com" });
+
+    const valueRes = await app.request(`${base}/v1.0/me/messages/${draftId}/attachments/${inline.id}/$value`, {
+      headers,
+    });
+    expect(valueRes.status).toBe(200);
+    expect(valueRes.headers.get("Content-Type")).toBe("image/png");
+    expect(Buffer.from(await valueRes.arrayBuffer())).toEqual(logoBytes);
+
+    const createSession = async (name: string, size: number) => {
+      const res = await app.request(`${base}/v1.0/me/messages/${draftId}/attachments/createUploadSession`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          AttachmentItem: {
+            attachmentType: "file",
+            name,
+            contentType: "image/png",
+            size,
+            isInline: true,
+            contentId: name,
+          },
+        }),
+      });
+      return String(((await res.json()) as Record<string, unknown>).uploadUrl);
+    };
+
+    const content = Buffer.from("odd-sized upload bytes");
+    const uploadUrl = await createSession("chart.png", content.length);
+    const firstChunkRes = await app.request(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Range": `bytes 0-4/${content.length}` },
+      body: content.subarray(0, 5),
+    });
+    expect(firstChunkRes.status).toBe(202);
+    const finalChunkRes = await app.request(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Range": `bytes 5-${content.length - 1}/${content.length}` },
+      body: content.subarray(5),
+    });
+    expect(finalChunkRes.status).toBe(201);
+    const uploaded = (await finalChunkRes.json()) as { id: string; isInline: boolean; contentId: string };
+    expect(uploaded).toMatchObject({ isInline: true, contentId: "chart.png" });
+    expect(finalChunkRes.headers.get("Location")).toBe(
+      `${base}/api/v2.0/Users('testuser@example.com')/Messages('${draftId}')/Attachments('${uploaded.id}')`,
+    );
+    expect(finalChunkRes.headers.get("Access-Control-Expose-Headers")).toBe("Location");
+    const uploadedValueRes = await app.request(
+      `${base}/v1.0/me/messages/${draftId}/attachments/${uploaded.id}/$value`,
+      { headers },
+    );
+    expect(Buffer.from(await uploadedValueRes.arrayBuffer())).toEqual(content);
+
+    const cancelledUrl = await createSession("cancelled.png", 10);
+    const cancelRes = await app.request(cancelledUrl, { method: "DELETE" });
+    expect(cancelRes.status).toBe(204);
+    expect((await app.request(cancelledUrl)).status).toBe(404);
+
+    for (const attachmentId of [inline.id, uploaded.id]) {
+      const deleteRes = await app.request(`${base}/v1.0/me/messages/${draftId}/attachments/${attachmentId}`, {
+        method: "DELETE",
+        headers,
+      });
+      expect(deleteRes.status).toBe(204);
+    }
+    const missingRes = await app.request(`${base}/v1.0/me/messages/${draftId}/attachments/${inline.id}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(missingRes.status).toBe(404);
+    const draft = (await (await app.request(`${base}/v1.0/me/messages/${draftId}`, { headers })).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(draft.hasAttachments).toBe(false);
+  });
+
+  it("updates master category colors across the full Outlook preset range", async () => {
+    const accessToken = await getAccessToken(app);
+    const jsonHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+    const createRes = await app.request(`${base}/v1.0/me/outlook/masterCategories`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ displayName: "Receipts", color: "preset18" }),
+    });
+    const created = (await createRes.json()) as { id: string; color: string };
+    expect(created.color).toBe("preset18");
+
+    const patchRes = await app.request(`${base}/v1.0/me/outlook/masterCategories/${created.id}`, {
+      method: "PATCH",
+      headers: jsonHeaders,
+      body: JSON.stringify({ color: "preset24" }),
+    });
+    expect(patchRes.status).toBe(200);
+    expect(((await patchRes.json()) as { color: string }).color).toBe("preset24");
+
+    const invalidRes = await app.request(`${base}/v1.0/me/outlook/masterCategories/${created.id}`, {
+      method: "PATCH",
+      headers: jsonHeaders,
+      body: JSON.stringify({ color: "preset25" }),
+    });
+    expect(invalidRes.status).toBe(400);
+  });
+
   it("lists calendars and calendar views", async () => {
     const accessToken = await getAccessToken(app);
 

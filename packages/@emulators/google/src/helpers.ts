@@ -105,6 +105,7 @@ type ParsedAttachment = {
   disposition: string | null;
   content_id: string | null;
   transfer_encoding: string | null;
+  attachment_id_header: string | null;
   data: string;
   size: number;
 };
@@ -1169,6 +1170,11 @@ function buildQueryPredicates(
     return [(message) => messageMatchesLabelQuery(gs, userEmail, message, labelQuery)];
   }
 
+  if (lower.startsWith("-in:")) {
+    const labelQuery = cleaned.slice(4);
+    return [(message) => !messageMatchesLabelQuery(gs, userEmail, message, labelQuery)];
+  }
+
   if (lower.startsWith("in:")) {
     const labelQuery = cleaned.slice(3);
     return [(message) => messageMatchesLabelQuery(gs, userEmail, message, labelQuery)];
@@ -1333,6 +1339,7 @@ function replaceMessageAttachments(gs: GoogleStore, message: GoogleMessage, atta
       disposition: attachment.disposition,
       content_id: attachment.content_id,
       transfer_encoding: attachment.transfer_encoding,
+      attachment_id_header: attachment.attachment_id_header,
       data: attachment.data,
       size: attachment.size,
     });
@@ -1639,6 +1646,9 @@ function createAttachmentPart(partId: string, attachment: GoogleAttachment) {
   if (attachment.content_id) {
     headers.push({ name: "Content-ID", value: attachment.content_id });
   }
+  if (attachment.attachment_id_header) {
+    headers.push({ name: "X-Attachment-Id", value: attachment.attachment_id_header });
+  }
 
   return {
     partId,
@@ -1734,6 +1744,7 @@ function parseRawMessage(raw: string): ParsedRawMessage {
       disposition: node.disposition,
       content_id: node.contentId,
       transfer_encoding: node.transferEncoding,
+      attachment_id_header: node.headers.get("x-attachment-id") ?? null,
       data: (node.body ?? Buffer.alloc(0)).toString("base64url"),
       size: node.body?.length ?? 0,
     }));

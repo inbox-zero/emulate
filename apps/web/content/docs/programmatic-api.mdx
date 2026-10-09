@@ -96,6 +96,11 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
       <td>Port for the HTTP server</td>
     </tr>
     <tr>
+      <td><code>hostname</code></td>
+      <td>all interfaces</td>
+      <td>Interface the HTTP server binds to, such as <code>'127.0.0.1'</code> for loopback only</td>
+    </tr>
+    <tr>
       <td><code>seed</code></td>
       <td>none</td>
       <td>Inline seed data (same shape as YAML config)</td>
