@@ -31,6 +31,7 @@ export interface SeedConfig {
 export interface EmulatorOptions {
   service: ServiceName;
   port?: number;
+  /** Listening address. Defaults to IPv4 loopback (127.0.0.1). */
   hostname?: string;
   seed?: SeedConfig;
   baseUrl?: string;
@@ -54,6 +55,7 @@ export interface Emulator {
 export interface CustomEmulatorOptions<State extends object> extends CustomRuntimeOptions<NoInfer<State>> {
   service: EmulatorDefinition<State>;
   port?: number;
+  /** Listening address. Defaults to IPv4 loopback (127.0.0.1). */
   hostname?: string;
   listen?: boolean;
 }
