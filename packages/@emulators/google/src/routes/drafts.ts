@@ -12,6 +12,8 @@ import {
   normalizeLimit,
   parseFormat,
   parseOffset,
+  readRawFrom,
+  resolveSendAsFrom,
   sendDraftMessage,
   updateDraftMessage,
 } from "../helpers.js";
@@ -45,6 +47,13 @@ export function draftRoutes({ app, store, baseUrl }: RouteContext): void {
     return uploads;
   };
 
+  // Gmail replaces the whole draft message on update, so its sender is checked again.
+  const parseDraftUpdate = (authEmail: string, messageBody: Record<string, unknown>) => {
+    const input = parseMessageInputFromBody(messageBody);
+    if (!input.raw && !input.from) return input;
+    return { ...input, from: resolveSendAsFrom(gs, authEmail, input.from ?? readRawFrom(input.raw)) };
+  };
+
   const applyDraftUpdate = (c: Context, authEmail: string, draftId: string, messageBody: Record<string, unknown>) => {
     const draft = getDraftById(gs, authEmail, draftId);
     if (!draft) {
@@ -52,7 +61,7 @@ export function draftRoutes({ app, store, baseUrl }: RouteContext): void {
     }
 
     try {
-      const updated = updateDraftMessage(gs, draft, parseMessageInputFromBody(messageBody));
+      const updated = updateDraftMessage(gs, draft, parseDraftUpdate(authEmail, messageBody));
       if (!updated) {
         return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
       }
@@ -79,9 +88,11 @@ export function draftRoutes({ app, store, baseUrl }: RouteContext): void {
     const messageBody = getDraftMessageBody(body);
 
     try {
+      const input = parseMessageInputFromBody(messageBody);
       const { draft } = createDraftMessage(gs, {
         user_email: authEmail,
-        ...parseMessageInputFromBody(messageBody, { from: authEmail }),
+        ...input,
+        from: resolveSendAsFrom(gs, authEmail, input.from ?? readRawFrom(input.raw)),
       });
 
       return c.json(formatDraftResource(gs, draft, "full"));
@@ -109,7 +120,7 @@ export function draftRoutes({ app, store, baseUrl }: RouteContext): void {
     const messageBody = getDraftMessageBody(body);
     if (getString(messageBody, "raw")) {
       try {
-        draftToSend = updateDraftMessage(gs, draft, parseMessageInputFromBody(messageBody))?.draft ?? draft;
+        draftToSend = updateDraftMessage(gs, draft, parseDraftUpdate(authEmail, messageBody))?.draft ?? draft;
       } catch {
         return googleApiError(c, 400, "Invalid raw MIME message payload.", "invalidArgument", "INVALID_ARGUMENT");
       }
