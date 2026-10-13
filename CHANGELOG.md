@@ -39,6 +39,12 @@
 
 - Fixed **Microsoft upload sessions** corrupting attachments whose chunks are not multiples of three bytes
 
+## 0.12.1
+
+### Bug Fixes
+
+- Fixed **emulator network exposure** by binding built-in and custom HTTP listeners to IPv4 loopback (`127.0.0.1`) by default. Container and remote workflows can opt into network access with `--host 0.0.0.0` or `hostname: '0.0.0.0'` (#276)
+
 ## 0.12.0
 
 ### New Features

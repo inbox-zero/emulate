@@ -97,8 +97,8 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
     </tr>
     <tr>
       <td><code>hostname</code></td>
-      <td>all interfaces</td>
-      <td>Interface the HTTP server binds to, such as <code>'127.0.0.1'</code> for loopback only</td>
+      <td><code>127.0.0.1</code></td>
+      <td>Listening address for built-in and custom emulators</td>
     </tr>
     <tr>
       <td><code>seed</code></td>
@@ -112,6 +112,8 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
     </tr>
   </tbody>
 </table>
+
+Use `hostname: '0.0.0.0'` to allow connections from containers or other machines, and `baseUrl` to advertise a URL reachable by those clients. This option also applies to custom definitions passed to `createEmulator`.
 
 ### Instance methods
 
