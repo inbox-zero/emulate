@@ -2,6 +2,22 @@
 
 <!-- release:start -->
 
+## 0.14.0
+
+### New Features
+
+- **Gmail send-as aliases** can be seeded with `send_as` (display name, signature, default flag, and `accepted` or `pending` verification), and created or deleted through `POST` and `DELETE` on `settings/sendAs`
+
+### Improvements
+
+- **Gmail send-as listing** reports `isPrimary` for the account address only and `verificationStatus` for aliases, matching Gmail
+
+### Bug Fixes
+
+- Fixed **Gmail sends and drafts** ignoring the message's From header. A From naming a verified send-as address is kept; any other From, or none, becomes the default send-as address with its display name
+
+<!-- release:end -->
+
 ## 0.13.0
 
 ### New Features
@@ -22,8 +38,6 @@
 ### Bug Fixes
 
 - Fixed **Microsoft upload sessions** corrupting attachments whose chunks are not multiples of three bytes
-
-<!-- release:end -->
 
 ## 0.12.0
 

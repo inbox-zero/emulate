@@ -321,6 +321,11 @@ google:
       name: Ops/Review
       color_background: "#DDEEFF"
       color_text: "#111111"
+  send_as:
+    - user_email: testuser@example.com
+      send_as_email: support@example.com
+      display_name: Support Team
+      signature: "<div>The Support Team</div>"
   messages:
     - id: msg_welcome
       user_email: testuser@example.com
@@ -981,12 +986,12 @@ Google ID tokens are RS256-signed JWTs. The discovery document advertises RS256,
 - `GET /gmail/v1/users/:userId/labels`, `POST /gmail/v1/users/:userId/labels`, `PATCH /gmail/v1/users/:userId/labels/:id`, `DELETE /gmail/v1/users/:userId/labels/:id`
 - `GET /gmail/v1/users/:userId/history`, `POST /gmail/v1/users/:userId/watch`, `POST /gmail/v1/users/:userId/stop`
 - `GET /gmail/v1/users/:userId/settings/filters`, `POST /gmail/v1/users/:userId/settings/filters`, `DELETE /gmail/v1/users/:userId/settings/filters/:id`
-- `GET /gmail/v1/users/:userId/settings/forwardingAddresses`, `GET /gmail/v1/users/:userId/settings/sendAs`
+- `GET /gmail/v1/users/:userId/settings/forwardingAddresses`, `GET /gmail/v1/users/:userId/settings/sendAs`, `POST /gmail/v1/users/:userId/settings/sendAs`, `DELETE /gmail/v1/users/:userId/settings/sendAs/:sendAsEmail`
 - `GET /discovery/v1/apis/calendar/v3/rest` — public Calendar v3 REST discovery document
 - `GET /calendar/v3/users/:userId/calendarList`, `GET /calendar/v3/calendars/:calendarId/events`, `POST /calendar/v3/calendars/:calendarId/events`, `DELETE /calendar/v3/calendars/:calendarId/events/:eventId`, `POST /calendar/v3/freeBusy`
 - `GET /drive/v3/files`, `GET /drive/v3/files/:fileId`, `POST /drive/v3/files`, `PATCH /drive/v3/files/:fileId`, `PUT /drive/v3/files/:fileId`, `POST /upload/drive/v3/files`
 
-`POST /upload/gmail/v1/users/:userId/drafts`, `PUT /upload/gmail/v1/users/:userId/drafts/:id`, and `POST /upload/gmail/v1/users/:userId/drafts/send` accept `multipart/related` media uploads (a JSON draft resource part plus a `message/rfc822` part) as well as plain `message/rfc822` bodies. `PUT /upload/gmail/v1/users/:userId/drafts/:id?uploadType=resumable` with an `X-Upload-Content-Length` header opens a resumable session and returns its URL in `Location`. `PUT` each chunk to that URL with `Content-Range`; the emulator answers `308` with a `Range` header until the last chunk replaces the draft message. Sending a draft with a `message.raw` applies that content before sending. Attachment parts keep their `X-Attachment-Id` header, and `q` accepts `in:` and `-in:` mailbox scopes alongside `label:` and `-label:`.
+`POST /upload/gmail/v1/users/:userId/drafts`, `PUT /upload/gmail/v1/users/:userId/drafts/:id`, and `POST /upload/gmail/v1/users/:userId/drafts/send` accept `multipart/related` media uploads (a JSON draft resource part plus a `message/rfc822` part) as well as plain `message/rfc822` bodies. `PUT /upload/gmail/v1/users/:userId/drafts/:id?uploadType=resumable` with an `X-Upload-Content-Length` header opens a resumable session and returns its URL in `Location`. `PUT` each chunk to that URL with `Content-Range`; the emulator answers `308` with a `Range` header until the last chunk replaces the draft message. Sending a draft with a `message.raw` applies that content before sending. Seed extra send-as aliases with `send_as` (`send_as_email`, optional `display_name`, `signature`, `is_default`, and `verification_status` of `accepted` or `pending`). Like Gmail, sent messages and drafts keep a From header naming a verified send-as address; any other From, or none, becomes the default send-as address. Attachment parts keep their `X-Attachment-Id` header, and `q` accepts `in:` and `-in:` mailbox scopes alongside `label:` and `-label:`.
 
 ## Slack API
 
