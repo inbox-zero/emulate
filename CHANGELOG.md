@@ -2,6 +2,14 @@
 
 <!-- release:start -->
 
+## 0.14.1
+
+### Bug Fixes
+
+- Fixed **Microsoft Graph message search** accepting an unquoted property search such as `$search=participants:user@example.com`. Graph rejects it with a `BadRequest` syntax error, and the emulator now does too, so clients must quote the expression
+
+<!-- release:end -->
+
 ## 0.14.0
 
 ### New Features
@@ -15,8 +23,6 @@
 ### Bug Fixes
 
 - Fixed **Gmail sends and drafts** ignoring the message's From header. A From naming a verified send-as address is kept; any other From, or none, becomes the default send-as address with its display name
-
-<!-- release:end -->
 
 ## 0.13.0
 
