@@ -28,6 +28,7 @@ import {
   parsePositiveInt,
   searchMessages,
   InvalidMessageSearchError,
+  MessageSearchSyntaxError,
   sortMessages,
   type UploadSessionRecord,
   updateMessage,
@@ -1712,6 +1713,7 @@ function searchGraphMessages(
   } catch (error) {
     if (error instanceof InvalidMessageSearchError)
       return microsoftGraphError(c, 400, "ErrorInvalidSearchQuery", error.message);
+    if (error instanceof MessageSearchSyntaxError) return microsoftGraphError(c, 400, "BadRequest", error.message);
     throw error;
   }
 }

@@ -1050,6 +1050,9 @@ function evaluateMessageFilter(message: MicrosoftMessage, expression: string): b
 
 export class InvalidMessageSearchError extends Error {}
 
+// Graph parses an unquoted $search as an OData expression, so property syntax fails before KQL sees it.
+export class MessageSearchSyntaxError extends Error {}
+
 export function searchMessages(
   messages: MicrosoftMessage[],
   searchExpression: string | null | undefined,
@@ -1167,6 +1170,12 @@ function messageMatchesSearchTerm(
 
 function parseMessageSearch(expression: string): MessageSearchExpression {
   let raw = expression.trim();
+  const colonIndex = raw.indexOf(":");
+  if (!raw.startsWith('"') && colonIndex !== -1) {
+    throw new MessageSearchSyntaxError(
+      `Syntax error: character ':' is not valid at position ${colonIndex} in '${raw}'.`,
+    );
+  }
   if (raw.startsWith('"')) {
     try {
       raw = JSON.parse(raw).trim();
