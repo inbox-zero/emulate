@@ -754,6 +754,19 @@ describe("Microsoft plugin integration", () => {
     }
   });
 
+  it("rejects a property search that is not wrapped in quotes, like Graph", async () => {
+    const accessToken = await getAccessToken(app);
+    const query = new URLSearchParams({ $search: "participants:recipient@example.com" });
+    const response = await app.request(`${base}/v1.0/me/messages?${query}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: { code: string; message: string } }).error).toMatchObject({
+      code: "BadRequest",
+      message: "Syntax error: character ':' is not valid at position 12 in 'participants:recipient@example.com'.",
+    });
+  });
+
   it("lists seeded messages and supports reply/send flows", async () => {
     const accessToken = await getAccessToken(app);
 
