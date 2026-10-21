@@ -1112,6 +1112,42 @@ describe("Microsoft plugin integration", () => {
     expect(((await expiredRes.json()) as { error: { code: string } }).error.code).toBe("SyncStateNotFound");
   });
 
+  it("serves a message as MIME through $value", async () => {
+    const accessToken = await getAccessToken(app);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const jsonHeaders = { ...headers, "Content-Type": "application/json" };
+    const draftRes = await app.request(`${base}/v1.0/me/messages`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        subject: "Source subject",
+        body: { contentType: "html", content: "<p>Source body</p>" },
+        toRecipients: [{ emailAddress: { name: "Recipient", address: "recipient@example.com" } }],
+      }),
+    });
+    const draftId = String(((await draftRes.json()) as Record<string, unknown>).id);
+    await app.request(`${base}/v1.0/me/messages/${draftId}/attachments`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        name: "notes.txt",
+        contentType: "text/plain",
+        contentBytes: Buffer.from("attachment text").toString("base64"),
+      }),
+    });
+
+    const res = await app.request(`${base}/v1.0/me/messages/${draftId}/$value`, { headers });
+    expect(res.status).toBe(200);
+    const mime = await res.text();
+    expect(mime).toMatch(/^Subject: Source subject\r$/m);
+    expect(mime).toMatch(/^To: "Recipient" <recipient@example\.com>\r$/m);
+    expect(mime).toContain('Content-Disposition: attachment; filename="notes.txt"');
+    expect(mime).toContain(Buffer.from("<p>Source body</p>").toString("base64"));
+
+    const missing = await app.request(`${base}/v1.0/me/messages/missing/$value`, { headers });
+    expect(missing.status).toBe(404);
+  });
+
   it("serves, deletes, and uploads inline message attachments", async () => {
     const accessToken = await getAccessToken(app);
     const headers = { Authorization: `Bearer ${accessToken}` };
