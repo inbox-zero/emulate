@@ -6,6 +6,7 @@ import {
   createMailFolderRecord,
   createMessageRecord,
   createReplyDraft,
+  buildMessageMime,
   ensureDefaultFolders,
   filterDriveItems,
   filterMessages,
@@ -591,6 +592,16 @@ export function graphRoutes(ctx: RouteContext): void {
     } catch {
       return microsoftGraphError(c, 404, "ErrorItemNotFound", "Destination folder not found.");
     }
+  });
+
+  app.get("/v1.0/me/messages/:messageId/$value", (c) => {
+    const authEmail = requireAuthEmail(ctx, c);
+    if (authEmail instanceof Response) return authEmail;
+    const message = resolveMessage(ctx, authEmail, c.req.param("messageId"));
+    if (!message) return microsoftGraphError(c, 404, "ErrorItemNotFound", "Message not found.");
+    return c.body(buildMessageMime(getMicrosoftStore(ctx.store), message), 200, {
+      "Content-Type": "text/plain",
+    });
   });
 
   app.get("/v1.0/me/messages/:messageId/attachments/:attachmentId/$value", (c) => {

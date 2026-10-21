@@ -1220,6 +1220,7 @@ grant_type=refresh_token"
 
 - `GET /v1.0/me/mailFolders/{folderId}/messages/delta` returns the folder's messages and an `@odata.deltaLink`. The link uses the `https://graph.microsoft.com` host, so route it back to the emulator, and it keeps any `$filter`. Following it returns the folder's current messages plus the ones that left it: moved messages as full resources with their new `parentFolderId`, deleted messages as `@removed` entries. `$deltatoken=expired` returns HTTP 410 `SyncStateNotFound`.
 - Messages expose `inferenceClassification` (`focused`, `other`, or `null`) and `flag.flagStatus` (`notFlagged`, `flagged`, or `complete`). Both can be patched and filtered with `$filter` on `inferenceClassification` and `flag/flagStatus`. Seed them with `inference_classification` and `flag_status` (or `flag: { flagStatus }`).
+- `GET /v1.0/me/messages/{id}/$value` returns the message as RFC 822 MIME, including its attachments.
 - `GET /v1.0/me/messages/{id}/attachments/{attachmentId}/$value` returns the raw attachment bytes, and `DELETE /v1.0/me/messages/{id}/attachments/{attachmentId}` removes an attachment.
 - Attachment creation and `createUploadSession` accept `isInline` and `contentId`. Upload session URLs are pre-authenticated, accept chunks of any size, and cancel on `DELETE`. The final chunk returns `201` with a `Location` header for the new attachment.
 - `PATCH /v1.0/me/outlook/masterCategories/{id}` updates a category `color`. Category colors are `preset0` through `preset24` and `none`.

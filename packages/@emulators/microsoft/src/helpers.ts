@@ -605,6 +605,60 @@ export function formatAttachmentResource(attachment: MicrosoftMessageAttachment)
   };
 }
 
+/** The message as RFC 822 MIME, the way Graph serves `/messages/{id}/$value`. */
+export function buildMessageMime(ms: MicrosoftStore, message: MicrosoftMessage): string {
+  const formatAddress = (recipient: { name?: string | null; address: string }) =>
+    recipient.name ? `"${recipient.name.replace(/["\\]/g, "\\$&")}" <${recipient.address}>` : recipient.address;
+  const formatList = (recipients: Array<{ name?: string | null; address: string }>) =>
+    recipients.map(formatAddress).join(", ");
+  const from = message.from_address ? formatAddress({ name: message.from_name, address: message.from_address }) : null;
+  const headers = [
+    ...(from ? [`From: ${from}`] : []),
+    ...(message.to_recipients.length ? [`To: ${formatList(message.to_recipients)}`] : []),
+    ...(message.cc_recipients.length ? [`Cc: ${formatList(message.cc_recipients)}`] : []),
+    ...(message.reply_to.length ? [`Reply-To: ${formatList(message.reply_to)}`] : []),
+    `Subject: ${message.subject}`,
+    `Date: ${new Date(message.sent_date_time ?? message.received_date_time).toUTCString()}`,
+    `Message-ID: ${message.internet_message_id}`,
+    "MIME-Version: 1.0",
+  ];
+  const bodyPart = [
+    `Content-Type: ${message.body_content_type === "html" ? "text/html" : "text/plain"}; charset="utf-8"`,
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(Buffer.from(message.body_content, "utf8").toString("base64")),
+  ].join("\r\n");
+  const attachments = ms.attachments
+    .findBy("user_email", message.user_email)
+    .filter((attachment) => attachment.message_microsoft_id === message.microsoft_id);
+
+  if (!attachments.length) return `${headers.join("\r\n")}\r\n${bodyPart}\r\n`;
+
+  const boundary = `emulate-mixed-${randomBytes(8).toString("hex")}`;
+  const parts = attachments.map((attachment) =>
+    [
+      `Content-Type: ${attachment.content_type}; name="${attachment.name}"`,
+      `Content-Disposition: ${attachment.is_inline ? "inline" : "attachment"}; filename="${attachment.name}"`,
+      ...(attachment.content_id ? [`Content-ID: <${attachment.content_id.replace(/^<|>$/g, "")}>`] : []),
+      "Content-Transfer-Encoding: base64",
+      "",
+      wrapBase64(attachment.content_bytes),
+    ].join("\r\n"),
+  );
+  return [
+    ...headers,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    ...[bodyPart, ...parts].flatMap((part) => [`--${boundary}`, part]),
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+}
+
+function wrapBase64(value: string): string {
+  return value.match(/.{1,76}/g)?.join("\r\n") ?? "";
+}
+
 export function formatMessageResource(ms: MicrosoftStore, message: MicrosoftMessage): Record<string, unknown> {
   const attachments = ms.attachments
     .findBy("message_microsoft_id", message.microsoft_id)
